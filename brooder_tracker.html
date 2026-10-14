@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThermoHuddle — Brooder Tracker & 3D Concept Model</title>
+<script src="p5.min.js"></script>
+<script src="mqtt.min.js"></script>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#24457e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ThermoHuddle">
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #0d1117; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 12px; left: 14px; z-index: 10;
+    font: 12px/1.5 'Segoe UI', system-ui, sans-serif;
+    color: #d8e1ff; background: rgba(13, 17, 23, 0.85);
+    border: 1px solid #2a3550; border-radius: 10px; padding: 10px 14px;
+    max-width: 310px; pointer-events: none;
+  }
+  #hud h1 { font-size: 14px; margin: 0 0 2px; color: #ffd166; letter-spacing: 0.4px; }
+  #hud .sub { color: #8b98b8; font-size: 10.5px; margin-bottom: 6px; }
+  #hud .row { display: flex; justify-content: space-between; gap: 10px; }
+  #hud .stat { color: #7ee787; font-weight: 600; }
+  #hud .warn { color: #ff7b72; font-weight: 700; }
+  #hud .state-label { font-size: 15px; font-weight: 700; margin-top: 4px; }
+  #legend {
+    position: fixed; bottom: 12px; left: 14px; z-index: 10;
+    font: 11px/1.6 'Segoe UI', system-ui, sans-serif;
+    color: #8b98b8; background: rgba(13,17,23,0.85);
+    border: 1px solid #2a3550; border-radius: 10px; padding: 8px 12px;
+    pointer-events: none; max-width: 340px;
+  }
+  #legend b { color: #d8e1ff; }
+  .sw { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align: middle; }
+  #scenarios {
+    position: fixed; bottom: 14px; right: 14px; z-index: 11;
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
+    max-width: 520px;
+  }
+  #scenarios button {
+    font: 11px/1 'Segoe UI', system-ui, sans-serif; color: #d8e1ff;
+    background: rgba(30, 38, 56, 0.92); border: 1px solid #3a4666;
+    border-radius: 999px; padding: 7px 12px; cursor: pointer;
+    transition: all .15s ease;
+  }
+  #scenarios button:hover { background: rgba(58, 70, 102, 0.95); border-color: #ffd166; }
+  #scenarios button.active { background: #ffd166; color: #1a1408; border-color: #ffd166; font-weight: 700; }
+  #scenarios button.active.danger { background: #ff7b72; border-color: #ff7b72; color: #26090a; }
+  #scenarios button.active.live { background: #4ec9b0; border-color: #4ec9b0; color: #062420; }
+  #livebox {
+    position: fixed; top: 12px; right: 14px; z-index: 11;
+    font: 11px/1.5 'Segoe UI', system-ui, sans-serif; color: #8b98b8;
+    background: rgba(13,17,23,0.85); border: 1px solid #2a3550;
+    border-radius: 10px; padding: 8px 12px; max-width: 330px;
+  }
+  #livebox b { color: #4ec9b0; }
+  #livebox button {
+    font: 11px/1 'Segoe UI', system-ui, sans-serif; color: #d8e1ff;
+    background: rgba(30,38,56,0.92); border: 1px solid #3a4666;
+    border-radius: 999px; padding: 5px 10px; cursor: pointer; margin-top: 4px;
+  }
+  #livebox button:hover { border-color: #4ec9b0; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>ThermoHuddle — Smart Brooder</h1>
+  <div class="sub">CpE 404 Capstone Concept · 1.0 m × 1.0 m brooder · Pi 5 + NoIR cam</div>
+  <div class="row"><span>Scenario</span><span class="stat" id="h-scen">—</span></div>
+  <div class="row"><span>Tracked chicks</span><span class="stat" id="h-count">50</span></div>
+  <div class="row"><span>Brooding day</span><span class="stat" id="h-day">1</span></div>
+  <div class="row"><span>Baseline setpoint</span><span class="stat" id="h-base">34.0°C</span></div>
+  <div class="row"><span>Behavioral trim</span><span class="stat" id="h-trim">+0.0°C</span></div>
+  <div class="row"><span>Active setpoint</span><span class="stat" id="h-set">34.0°C</span></div>
+  <div class="row"><span>Floor temp (PV)</span><span class="stat" id="h-floor">—</span></div>
+  <div class="row"><span>Mean NND</span><span class="stat" id="h-nnd">—</span></div>
+  <div class="row"><span>Occupancy entropy</span><span class="stat" id="h-ent">—</span></div>
+  <div class="row"><span>Clark–Evans R</span><span class="stat" id="h-r">—</span></div>
+  <div class="row"><span>Max cell fraction</span><span class="stat" id="h-cell">—</span></div>
+  <div class="row"><span>Lamp duty</span><span class="stat" id="h-lamp">—</span></div>
+  <div class="row"><span>NH₃ (MQ-137)</span><span class="stat" id="h-nh3">—</span></div>
+  <div class="row"><span>Exhaust fan</span><span class="stat" id="h-fan">OFF</span></div>
+  <div class="row"><span>MQTT link</span><span class="stat" id="h-mqtt">off (JSON poll)</span></div>
+  <div class="row"><span>Comfort state</span><span class="state-label" id="h-state">—</span></div>
+  <div class="row"><span>Crowding rule</span><span class="stat" id="h-crowd">clear</span></div>
+  <div class="row"><span>Alerts</span><span id="h-alert" class="stat">none</span></div>
+</div>
+
+<div id="livebox">
+  <b>LIVE tracking mode</b> — real chick detections drive the dots.<br>
+  Feed data: <code>window.setChickPositions([[x,z],...])</code> (cm, 0–100),
+  or load a <code>tracking_latest.json</code> file. Auto-fetch every 2 s when
+  served over http (python -m http.server).<br>
+  <button id="btn-mqtt" title="Connect to the MQTT broker (WebSocket)">⚡ Connect MQTT</button>
+  <button id="btn-loadjson" title="Load a saved tracking JSON">📂 Load JSON…</button>
+  <input type="file" id="file-json" accept=".json" style="display:none">
+</div>
+
+<div id="scenarios">
+  <button data-s="AUTO" title="Cycle through every scenario automatically (key A)">▶ Auto cycle</button>
+  <button data-s="COMFY" title="Key 1">1 · Comfortable</button>
+  <button data-s="COLD" title="Key 2">2 · Too cold</button>
+  <button data-s="HOT" title="Key 3">3 · Too hot</button>
+  <button data-s="DRAFT" title="Key 4">4 · Draft</button>
+  <button data-s="CROWD" title="Key 5">5 · Crowding</button>
+  <button data-s="LAMPFAIL" title="Key 6">6 · Lamp failure</button>
+  <button data-s="AMMONIA" title="Key 7">7 · Ammonia spike</button>
+  <button data-s="LIVE" title="Key L — real detection data">◉ LIVE data</button>
+</div>
+
+<div id="legend">
+  <b>Scenario simulation:</b> buttons or keys 1–7 · <b>A</b> auto ·
+  <b>L</b> live · <b>Drag</b> orbit · <b>Scroll</b> zoom · <b>S</b> saves PNG<br>
+  <span class="sw" style="background:#ff7b3d"></span>IR pods (940nm) ·
+  <span class="sw" style="background:#4ec9b0"></span>DS18B20 ×4 ·
+  <span class="sw" style="background:#c58fff"></span>DHT22 / MQ-137 ·
+  <span class="sw" style="background:#ffd166"></span>ceramic lamp ·
+  <span class="sw" style="background:#555"></span>chicks
+</div>
+<script>
+p5.disableFriendlyErrors = true;
+
+// ===== CONFIG =====
+const CONFIG = {
+  nChicks: 50,
+  floor: 100,            // cm world units (1 unit = 1 cm)
+  wallH: 40,
+  camH: 95,
+  seed: 7,
+};
+
+const STATES = {
+  COMFY:   { name: 'COMFORTABLE',   col: '#7ee787' },
+  COLD:    { name: 'TOO COLD',      col: '#6cb6ff' },
+  HOT:     { name: 'TOO HOT',       col: '#ff7b72' },
+  DRAFT:   { name: 'DRAFT',         col: '#b3d4ff' },
+  CROWD:   { name: 'CROWDING RISK', col: '#ffcc66' },
+};
+
+// Scenario metadata
+const SCENARIOS = {
+  COMFY:    { label: 'Comfortable',   danger: false },
+  COLD:     { label: 'Too cold',      danger: false },
+  HOT:      { label: 'Too hot',       danger: false },
+  DRAFT:    { label: 'Draft',         danger: false },
+  CROWD:    { label: 'Crowding risk', danger: true  },
+  LAMPFAIL: { label: 'Lamp failure',  danger: true  },
+  AMMONIA:  { label: 'Ammonia spike', danger: true  },
+  LIVE:     { label: 'LIVE tracking', danger: false },
+};
+const AUTO_ORDER = ['COMFY','COLD','HOT','DRAFT','CROWD','LAMPFAIL','AMMONIA'];
+const CYCLE_FRAMES = 560; // ~9.3 s per scenario at 60 fps
+
+// ===== PLAN-ALIGNED CONTROL MODEL (Software Build Plan, Oct 14) =====
+const PLAN = {
+  baseDay1: 34.0, baseDay14: 29.0,          // age-based baseline [A]
+  trimStep: 0.5, trimLimit: 2.0,            // ±2.0°C authority
+  trimDwell: 600,                           // frames between trim steps (10 min scaled)
+  crowdCellFrac: 0.45,                      // max-cell-fraction threshold [A]
+  crowdWindows: 3,                          // consecutive windows to fire
+  nh3On: 25, nh3Off: 15, nh3Crit: 50,
+};
+
+function baselineForDay(day) {
+  const d = constrain(day, 1, 14);
+  return PLAN.baseDay1 + (d - 1) / 13 * (PLAN.baseDay14 - PLAN.baseDay1);
+}
+
+let chicks = [];          // simulated agents
+let liveDots = [];        // {x,z} world coords from real detections (LIVE mode)
+let liveFresh = false;
+let sim = { t: 0, mode: 'auto', forced: 'COMFY', day: 1,
+            baseline: 34.0, trim: 0, setpoint: 34.0, lampPWM: 0.8,
+            floorT: 32.5, classState: 'COMFY', holdTimer: 0, nh3: 6,
+            crowdStreak: 0, crowdActive: false, crowdAlertAt: 0,
+            stats: null, alerts: [] };
+
+let camAng = -0.65, camElev = 0.42, camDist = 210;
+let dragging = false, lastX = 0, lastY = 0;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight, WEBGL);
+  randomSeed(CONFIG.seed); noiseSeed(CONFIG.seed);
+  pixelDensity(1);
+  setAttributes('antialias', true);
+  for (let i = 0; i < CONFIG.nChicks; i++) chicks.push(new Chick());
+  assignHomes();
+}
+
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+
+// Precompute per-chick home slots so each scenario has a realistic,
+// non-colliding target distribution (shuffled, with jitter).
+function assignHomes() {
+  // HOT: chicks hug the walls — square perimeter, evenly spaced + jitter
+  const per = [];
+  for (let i = 0; i < 52; i++) {
+    const side = i % 4;
+    const t = -42 + 84 * ((floor(i / 4) + random(-0.35, 0.35)) / 13);
+    if (side === 0) per.push(createVector(t, 0, -42));
+    else if (side === 1) per.push(createVector(42, 0, t));
+    else if (side === 2) per.push(createVector(t, 0, 42));
+    else per.push(createVector(-42, 0, t));
+  }
+  per.sort(() => random() - 0.5);
+  // COMFY: jittered 7×8 grid across the floor
+  const gridPts = [];
+  for (let gz = 0; gz < 8; gz++)
+    for (let gx = 0; gx < 7; gx++)
+      gridPts.push(createVector(map(gx, 0, 6, -40, 40) + random(-4, 4), 0,
+                                map(gz, 0, 7, -42, 42) + random(-4, 4)));
+  gridPts.sort(() => random() - 0.5);
+  chicks.forEach((c, i) => {
+    c.home = per[i % per.length];
+    c.comfyHome = gridPts[i % gridPts.length];
+  });
+}
+
+// ===== SCENARIO CONTROL =====
+function setScenario(s) {
+  if (s === 'AUTO') { sim.mode = 'auto'; }
+  else { sim.mode = 'manual'; sim.forced = s; }
+  // simulator context switch = new world: reset the crowding latch
+  // (in LIVE mode the latch clears only on real acknowledgement)
+  if (s !== 'LIVE') { sim.crowdActive = false; sim.crowdStreak = 0; }
+  updateButtons();
+}
+function updateButtons() {
+  const active = sim.mode === 'auto' ? 'AUTO' : sim.forced;
+  document.querySelectorAll('#scenarios button').forEach(b => {
+    const on = b.dataset.s === active;
+    b.classList.toggle('active', on);
+    b.classList.toggle('danger', on && SCENARIOS[b.dataset.s] && SCENARIOS[b.dataset.s].danger);
+    b.classList.toggle('live', on && b.dataset.s === 'LIVE');
+  });
+}
+document.querySelectorAll('#scenarios button').forEach(b => {
+  b.addEventListener('click', () => setScenario(b.dataset.s));
+});
+
+// ===== LIVE DATA API =====
+// Accepts chick positions in cm, either corner-origin (0–100) or
+// centered (−50..50). Format is detected per-batch: any value > 50
+// means the whole batch is corner-origin and gets shifted.
+// Example: setChickPositions([[50,50],[52,51]])
+window.setChickPositions = function(arr) {
+  arr = arr || [];
+  const cornerFormat = arr.some(p => p[0] > 50 || p[1] > 50);
+  liveDots = arr.map(p => {
+    let x = parseFloat(p[0]), z = parseFloat(p[1]);
+    if (cornerFormat) { x -= 50; z -= 50; }
+    return { x, z };
+  }).filter(p => isFinite(p.x) && isFinite(p.z));
+  liveFresh = liveDots.length > 0;
+  if (sim.forced !== 'LIVE') setScenario('LIVE');
+};
+
+function ingestTrackingJSON(txt) {
+  const d = JSON.parse(txt);
+  const arr = d.chicks || d.positions || d;
+  if (Array.isArray(arr) && (typeof arr[0] === 'number' || Array.isArray(arr[0])))
+    window.setChickPositions(arr);
+  // plan v2 schema: baseline + trim (fallback to legacy absolute setpoint)
+  if (isFinite(d.baseline)) sim.baseline = d.baseline;
+  if (isFinite(d.trim))     sim.trim = d.trim;
+  if (isFinite(d.day))      sim.day = d.day;
+  if (isFinite(d.floorT))  sim.floorT  = d.floorT;
+  if (isFinite(d.setpoint)) sim.setpoint = d.setpoint;
+  if (isFinite(d.duty))     sim.lampPWM = d.duty / 100;
+  else if (isFinite(d.pwm)) sim.lampPWM = d.pwm / 255;
+  if (isFinite(d.nh3))      sim.nh3 = d.nh3;
+  if (typeof d.crowding === 'boolean') {
+    sim.crowdActive = d.crowding;
+    if (d.crowding) sim.crowdAlertAt = sim.t;
+  }
+  if (d.state) { sim.classState = d.state; }
+}
+
+document.getElementById('btn-loadjson').addEventListener('click', () =>
+  document.getElementById('file-json').click());
+document.getElementById('file-json').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  f.text().then(ingestTrackingJSON).catch(err => alert('JSON parse error: ' + err));
+});
+
+// "Connect MQTT" button: use broker.js config if present, else same-host:9001
+document.getElementById('btn-mqtt').addEventListener('click', () => {
+  if (window.__mqttClient && window.__mqttLive) {   // toggle off
+    window.__mqttClient.end(true);
+    window.__mqttClient = null; window.__mqttLive = false;
+    const el = document.getElementById('h-mqtt');
+    el.textContent = 'off (JSON poll)'; el.style.color = '#7ee787';
+    return;
+  }
+  // preferred: a broker.js sitting next to this page (kept out of git!)
+  fetch('broker.js', { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw 0; return r.text(); })
+    .then(txt => {
+      // broker.js format: window.BROKER = { url: 'ws://...', username?, password?, topic? }
+      (0, eval)(txt);
+      const b = window.BROKER || {};
+      window.connectMQTT(b.url, b);
+    })
+    .catch(() => {
+      // fallback: assume the broker runs on the same host that serves this page
+      const host = location.hostname || 'localhost';
+      window.connectMQTT('ws://' + host + ':9001');
+    });
+});
+
+// auto-fetch when served over http (works with: python -m http.server)
+setInterval(() => {
+  if (sim.forced !== 'LIVE') return;
+  if (window.__mqttLive) return;          // MQTT connected → skip JSON polling
+  fetch('tracking_latest.json', { cache: 'no-store' })
+    .then(r => { if (r.ok) return r.text(); throw 0; })
+    .then(ingestTrackingJSON)
+    .catch(() => {});   // silent on file:// or missing file
+}, 2000);
+
+// ===== MQTT-over-WebSocket LIVE data (remote deployment) =====
+// Browsers can't speak raw TCP MQTT (port 1883) — they need the WebSocket
+// transport (port 9001, mosquitto 'protocol websockets'). Connect automatically
+// when a broker URL is given, or manually:
+//   window.connectMQTT('ws://192.168.1.50:9001')
+//   window.connectMQTT('wss://your-broker.example.com:9001', {
+//     username: 'user', password: 'pass', topic: 'thermohuddle/telemetry' })
+window.__mqttLive = false;
+
+window.connectMQTT = function(url, opts) {
+  opts = opts || {};
+  if (typeof mqtt === 'undefined') {
+    console.warn('[mqtt] mqtt.min.js not loaded');
+    return;
+  }
+  // plan topics (S7): env carries the full telemetry incl. chicks;
+  // subscribe to both plan topic and the legacy merged channel
+  const topics = opts.topic
+    ? [opts.topic]
+    : ['thermohuddle/telemetry/env', 'thermohuddle/telemetry',
+       'thermohuddle/inference/window', 'thermohuddle/status', 'thermohuddle/events'];
+  console.log('[mqtt] connecting to', url, 'topics', topics);
+  const client = mqtt.connect(url, opts);
+  client.on('connect', () => {
+    console.log('[mqtt] connected, subscribing to', topics);
+    topics.forEach(t => client.subscribe(t));
+    window.__mqttLive = true;
+    const el = document.getElementById('h-mqtt');
+    if (el) { el.textContent = 'connected ' + url.replace(/^wss?:\/\//, ''); el.style.color = '#4ec9b0'; }
+  });
+  client.on('message', (t, payload) => {
+    try {
+      const d = JSON.parse(payload.toString());
+      if (t.endsWith('status')) {
+        const el = document.getElementById('h-mqtt');
+        if (el && d.state) el.textContent = 'connected · brain ' + d.state;
+      } else if (t.endsWith('events')) {
+        if (d.kind === 'crowding') sim.crowdActive = d.data.active;
+        if (d.kind === 'state_change' && d.data.state) sim.classState = d.data.state;
+      } else if (t.endsWith('inference/window')) {
+        if (d.state) sim.classState = d.state;
+        if (isFinite(d.trim)) sim.trim = d.trim;
+      } else {
+        ingestTrackingJSON(payload.toString());
+      }
+    } catch (e) { console.warn('[mqtt] bad payload', e); }
+  });
+  client.on('error', (e) => {
+    console.warn('[mqtt] error:', e.message);
+    window.__mqttLive = false;
+    const el = document.getElementById('h-mqtt');
+    if (el) { el.textContent = 'error — using JSON poll'; el.style.color = '#ff7b72'; }
+  });
+  client.on('close', () => { window.__mqttLive = false; });
+  window.__mqttClient = client;
+  if (sim.forced !== 'LIVE') setScenario('LIVE');
+};
+
+// ===== CHICK AGENT =====
+// target = comfort attractor; urgency = commit strength; wander = noise level
+class Chick {
+  constructor() {
+    this.pos = createVector(random(-46, 46), 0, random(-46, 46));
+    this.vel = createVector(random(-0.3, 0.3), 0, random(-0.3, 0.3));
+    this.chirp = random(1000);
+    this.home = null;      // HOT perimeter slot (assignHomes)
+    // COLD huddle: own spot in a disk r=14cm under the lamp
+    const ca = random(TWO_PI), cr = Math.sqrt(random()) * 14;
+    this.coldSpot = createVector(Math.cos(ca) * cr, 0, -6 + Math.sin(ca) * cr);
+    // DRAFT: own spot in the safe half, away from the cold corner
+    this.draftSpot = createVector(random(10, 42), 0, random(10, 42));
+    this.comfyHome = null; // COMFY floor-grid slot (assignHomes)
+  }
+  update(target, urgency, wander) {
+    wander = wander === undefined ? 0.05 : wander;
+    const seek = p5.Vector.sub(target, this.pos);
+    seek.y = 0; seek.limit(urgency);
+    const ang = this.chirp + noise(sim.t * 0.02 + this.chirp * 1.7) * TWO_PI * 1.4;
+    const n = wander * noise(sim.t * 0.013 + this.chirp);
+    this.vel.add(seek);
+    this.vel.add(createVector(cos(ang) * n, 0, sin(ang) * n));
+    this.vel.limit(0.55);
+    this.pos.add(this.vel);
+    this.pos.x = constrain(this.pos.x, -CONFIG.floor/2 + 4, CONFIG.floor/2 - 4);
+    this.pos.z = constrain(this.pos.z, -CONFIG.floor/2 + 4, CONFIG.floor/2 - 4);
+  }
+  display() {
+    push();
+    translate(this.pos.x, -1.2, this.pos.z);
+    noStroke();
+    fill(245, 240, 226);
+    sphere(2.2, 10, 8);
+    translate(0, 1.4, 1.6);
+    fill(255, 200, 120);
+    sphere(1.3, 8, 6);
+    pop();
+  }
+}
+
+function drawDot(x, z) {   // LIVE-mode rendering (same look as sim chicks)
+  push();
+  translate(x, -1.2, z);
+  noStroke();
+  fill(120, 220, 190);      // teal tint = real tracked data
+  sphere(2.2, 10, 8);
+  translate(0, 1.4, 1.6);
+  fill(180, 255, 230);
+  sphere(1.3, 8, 6);
+  pop();
+}
+
+// ===== SIMULATION =====
+function updateSim() {
+  sim.t++;
+
+  if (sim.mode === 'auto' && sim.forced !== 'LIVE') {
+    const idx = floor(sim.t / CYCLE_FRAMES) % AUTO_ORDER.length;
+    sim.forced = AUTO_ORDER[idx];
+  }
+
+  if (sim.forced === 'LIVE') {
+    // classification runs on REAL detection positions; controller reacts to it
+    classifyFromPositions(liveDots.map(d => [d.x, d.z]));
+  } else {
+    applyBehavior(sim.forced);
+  }
+
+  // --- plan-aligned control: baseline + trim + inner loop (S1/S3) ---
+  // In LIVE mode the Pi pipeline is authoritative: telemetry sets baseline,
+  // trim, floorT, duty — the local control model must NOT touch them.
+  if (sim.forced !== 'LIVE') {
+    sim.baseline = baselineForDay(sim.day);
+    const envLoad = { COMFY: 0, COLD: 4, HOT: -2.5, DRAFT: 2, CROWD: 0,
+                      LAMPFAIL: 0, AMMONIA: 0, LIVE: 0 }[sim.forced] || 0;
+    // trim manager: step per confirmed state, dwell + clamp (fan blanking simplified in sim)
+    const trimStepFor = { COLD: +0.5, HOT: -0.5, DRAFT: +0.5, COMFY: 0.0 };
+    const step = trimStepFor[sim.classState] || 0.0;
+    if (sim.t % 40 === 0) {   // scaled decision cadence
+      sim.trim = constrain(sim.trim + step, -PLAN.trimLimit, PLAN.trimLimit);
+    }
+    sim.setpoint = sim.baseline + sim.trim;
+
+    if (sim.forced === 'LAMPFAIL') {
+      // actuator mostly dead: outer loop demands heat, dimmer can't deliver
+      sim.lampPWM = lerp(sim.lampPWM, 0.08, 0.08);
+    } else {
+      const err = sim.setpoint - sim.floorT;                     // inner loop
+      sim.lampPWM = constrain(sim.lampPWM + err * 0.012, 0, 1);
+    }
+    // floorT relaxes toward its equilibrium: 26 + lamp·9 − env load
+    const eq = 26 + sim.lampPWM * 9 - envLoad;
+    sim.floorT = lerp(sim.floorT, eq, 0.03);
+  } else {
+    // LIVE: keep setpoint = baseline + trim from telemetry
+    sim.setpoint = sim.baseline + sim.trim;
+  }
+
+  // --- crowding hard override: max-cell rule OUTSIDE the classifier (S6) ---
+  // streak breaks instantly when the pile shrinks; after an alarm, clearing
+  // requires a sustained-dispersal grace (90 frames below threshold) so the
+  // flock traveling between spots can't re-trigger it spuriously.
+  if (sim.stats) {
+    const f = sim.stats.cellFrac;
+    if (f >= PLAN.crowdCellFrac) {
+      if (!sim.crowdActive) sim.crowdStreak++;
+      sim.crowdGrace = 0;                  // pile present → grace reset
+    } else if (f < PLAN.crowdCellFrac * 0.8) {
+      sim.crowdStreak = 0;
+    }
+  }
+  if (!sim.crowdActive && sim.crowdStreak >= PLAN.crowdWindows) {
+    sim.crowdActive = true; sim.crowdAlertAt = sim.t;
+  } else if (sim.crowdActive && sim.t - sim.crowdAlertAt > 60 * 5) {
+    sim.crowdAlertAt = sim.t;    // re-alert every 5 min until acknowledged
+  }
+  // clearing: sustained dispersal (90 frames below threshold) clears the alarm
+  if (sim.crowdActive) {
+    sim.crowdGrace = (sim.crowdGrace || 0) + 1;
+    if (sim.crowdGrace >= 90) {            // ~1.5 s of sustained dispersal at 60fps
+      sim.crowdActive = false; sim.crowdGrace = 0;
+    }
+  }
+
+  const nh3Target = sim.forced === 'AMMONIA' ? 42 : 6;
+  sim.nh3 = lerp(sim.nh3, nh3Target, sim.forced === 'AMMONIA' ? 0.06 : 0.02);
+}
+
+// Drive simulated chick behavior for the active scenario
+function applyBehavior(mode) {
+  for (const c of chicks) {
+    switch (mode) {
+      case 'COLD':
+      case 'LAMPFAIL':
+        // cold: loose huddle in a ring under the lamp (each chick its own spot)
+        c.update(c.coldSpot, 0.10, 0.03);
+        break;
+      case 'HOT':
+        // hot: every chick seeks its OWN spread-home → uniform floor coverage
+        c.update(c.home || createVector(0, 0, 0), 0.10, 0.02);
+        break;
+      case 'DRAFT':
+        // draft: flock presses into the safe half, away from the cold corner
+        c.update(c.draftSpot, 0.08, 0.03);
+        break;
+      case 'CROWD':
+        // panic pile-up: high urgency + strong jitter = shifting, scrambling pile
+        c.update(createVector(10, 0, 4), 0.15, 0.10);
+        break;
+      case 'AMMONIA':
+        // lethargic, drifting away from the fan wall
+        c.update(createVector(0, 0, -8), 0.05, 0.05);
+        break;
+      default: // COMFY: own floor-grid slot + heavy wander
+        c.update(c.comfyHome || createVector(0, 0, 0), 0.04, 0.10);
+    }
+  }
+  // separation: chick bodies (~2.5 cm) must not overlap — sets a physical
+  // floor on NND so huddles look like real pile-ups, not point collapses
+  for (let i = 0; i < chicks.length; i++) {
+    for (let j = i + 1; j < chicks.length; j++) {
+      const a = chicks[i].pos, b = chicks[j].pos;
+      const dx = a.x - b.x, dz = a.z - b.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > 0.001 && d2 < 9) {          // closer than 3 cm
+        const d = Math.sqrt(d2), push = (3 - d) * 0.35;
+        const nx = dx / d, nz = dz / d;
+        a.x += nx * push; a.z += nz * push;
+        b.x -= nx * push; b.z -= nz * push;
+      }
+    }
+  }
+  classifyFromPositions(chicks.map(c => [c.pos.x, c.pos.z]));
+}
+
+// Classify from an array of [x,z] world positions (sim OR live data)
+// CROWDING IS NOT A CLASS HERE — it's the separate max-cell hard rule (S6).
+function classifyFromPositions(pts) {
+  const r = computeStatsPts(pts);
+  if (r.s === sim.classState) sim.holdTimer = 0; else sim.holdTimer++;
+  if (sim.holdTimer > 45) { sim.classState = r.s; sim.holdTimer = 0; }
+  sim.stats = r;
+
+  sim.alerts = [];
+  if (sim.forced === 'LAMPFAIL') sim.alerts.push('LAMP FAILURE — duty≈0, floor cooling');
+  if (sim.crowdActive) sim.alerts.push('CROWDING RULE ACTIVE — alarm + vent burst (ack required)');
+  else if (sim.crowdStreak > 0) sim.alerts.push('crowding streak: ' + sim.crowdStreak + '/' + PLAN.crowdWindows);
+  if (sim.classState === 'DRAFT') sim.alerts.push('draft detected — trim +0.5°C (if fans off)');
+  if (sim.nh3 >= PLAN.nh3Crit) sim.alerts.push('NH₃ CRITICAL ' + sim.nh3.toFixed(0) + ' ppm — alarm');
+  else if (sim.nh3 >= PLAN.nh3On) sim.alerts.push('NH₃ ' + sim.nh3.toFixed(0) + ' ppm — vent ON (min-run 5 min)');
+  if (sim.alerts.length === 0) sim.alerts.push('none');
+}
+
+// Spatial statistics — mirrors thermohuddle_draft_v2.py (keep in sync!)
+// Crowding is NOT classified here — it's the max-cell hard rule (S6).
+function computeStatsPts(pts) {
+  const N = pts.length;
+  if (N === 0) return { s: sim.classState, nnd: 0, entropyN: 0, centroidDist: 0,
+                        centerOcc: 0, cellFrac: 0, clarkEvans: 1 };
+
+  // mean nearest-neighbour distance
+  let nndSum = 0;
+  for (let i = 0; i < N; i++) {
+    let best = 1e9;
+    for (let j = 0; j < N; j++) if (i !== j) {
+      const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+      if (d < best) best = d;
+    }
+    nndSum += best;
+  }
+  const nnd = nndSum / N;
+
+  // Clark–Evans R: mean NND vs expected for random scatter (R<1 clustered)
+  const expected = 0.5 * Math.sqrt(1.0 / N);       // metres, 1 m² floor
+  const clarkEvans = (nnd / 100) / expected;
+
+  // Shannon occupancy entropy on the 4×4 grid, normalized
+  const G = 4, counts = new Array(G * G).fill(0);
+  for (const p of pts) {
+    const gx = constrain(floor((p[0] + 50) / 100 * G), 0, G - 1);
+    const gz = constrain(floor((p[1] + 50) / 100 * G), 0, G - 1);
+    counts[gz * G + gx]++;
+  }
+  let H = 0, maxCell = 0;
+  for (const k of counts) { if (k > maxCell) maxCell = k; if (k > 0) { const p = k / N; H -= p * log(p); } }
+  const entropyN = H / log(G * G);
+  const cellFrac = maxCell / N;
+
+  // centroid distance from brooder center (cm) + center occupancy fraction
+  let cx = 0, cz = 0, inCenter = 0;
+  for (const p of pts) { cx += p[0]; cz += p[1]; if (Math.hypot(p[0], p[1]) < 20) inCenter++; }
+  const centroidDist = Math.hypot(cx / N, cz / N);
+  const centerOcc = inCenter / N;
+  const cold = sim.floorT < 31.5;   // temp context fuses into classification
+
+  // Comfort classes only (COMFY/COLD/HOT/DRAFT); order matters:
+  // 1. DRAFT: flock pushed off-center
+  // 2. HOT: lamp zone abandoned + high spread entropy
+  // 3. COLD: tight pile + cold floor
+  if (centroidDist > 15 && entropyN < 0.75)   return { s: 'DRAFT', nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+  if (centerOcc < 0.06 && entropyN > 0.80)    return { s: 'HOT',   nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+  if (nnd < 5.0 && cold)                      return { s: 'COLD',  nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+  return { s: 'COMFY', nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+}
+
+function flockCentroid(pts) {
+  let x = 0, z = 0;
+  for (const p of pts) { x += p[0]; z += p[1]; }
+  return pts.length ? createVector(x / pts.length, 0, z / pts.length) : createVector(0, 0, 0);
+}
+
+// ===== SCENE =====
+function draw() {
+  updateSim();
+  updateButtons();
+  background(205, 207, 212);          // bright indoor wall, per reference photo
+  ambientLight(160, 160, 175);
+  directionalLight(255, 250, 240, -0.4, -1, -0.3);
+  directionalLight(120, 130, 160, 0.5, -0.4, 0.4);   // cool fill from window
+
+  const cy = sin(camElev) * camDist, ch = cos(camElev) * camDist;
+  camera(cos(camAng) * ch, -cy, sin(camAng) * ch, 0, -35, 0, 0, 1, 0);
+
+  drawBrooder();
+  const isLive = sim.forced === 'LIVE';
+  if (isLive) {
+    for (const d of liveDots) drawDot(d.x, d.z);
+  } else {
+    drawCrowdPulse(isLive);
+    for (const c of chicks) c.display();
+  }
+  drawHeat(isLive);
+  drawHUD();
+}
+
+function drawBrooder() {
+  const F = CONFIG.floor, H = CONFIG.wallH, half = F / 2;
+
+  // ---- wooden legs (brooder as a raised table, per reference photo) ----
+  push(); noStroke();
+  fill(146, 102, 58);
+  for (const [lx, lz] of [[-half+6, -half+6], [half-6, -half+6], [-half+6, half-6], [half-6, half-6]]) {
+    push(); translate(lx, 13, lz); box(4.5, 24, 4.5); pop();
+  }
+  pop();
+
+  // ---- floor: plywood slab + rice-hull bedding ----
+  push(); noStroke();
+  fill(120, 85, 50);                    // wood slab
+  box(F, 2, F);
+  fill(214, 192, 148);                  // bedding layer
+  translate(0, -1.1, 0);
+  box(F - 2, 0.6, F - 2);
+  pop();
+
+  // 4×4 analysis grid
+  push(); stroke(150, 130, 95); strokeWeight(0.6); noFill();
+  for (let i = 0; i <= 4; i++) {
+    const p = -half + (F / 4) * i;
+    line(p, -1.5, -half, p, -1.5, half);
+    line(-half, -1.5, p, half, -1.5, p);
+  }
+  pop();
+
+  // ---- wooden frame: corner posts + top rails (per reference photo) ----
+  stroke(146, 102, 58); strokeWeight(3.4); noFill();
+  for (const s of [-1, 1]) {
+    line(s*half, -2, -half, s*half, -H-2, -half);
+    line(s*half, -2,  half, s*half, -H-2,  half);
+    line(-half, -H-1, s*half, half, -H-1, s*half);
+    line(s*half, -H-1, -half, s*half, -H-1, half);
+  }
+  // mid rail (curtain rod) at curtain hem height
+  stroke(120, 84, 48); strokeWeight(1.8);
+  for (const s of [-1, 1]) {
+    line(-half, -22, s*half, half, -22, s*half);
+    line(s*half, -22, -half, s*half, -22, half);
+  }
+
+  // ---- blue tarp curtains (top rail to hem, gentle ripple) ----
+  // semi-transparent so the flock stays visible from any orbit angle
+  noStroke();
+  for (let side = 0; side < 4; side++) {
+    push();
+    if (side === 0) rotateY(0);                 // wall at -z
+    if (side === 1) rotateY(HALF_PI);          // wall at -x
+    if (side === 2) rotateY(PI);               // wall at +z
+    if (side === 3) rotateY(-HALF_PI);          // wall at +x
+    translate(0, 0, -half + 1.2);
+    fill(70, 105, 170, 82);
+    beginShape(TRIANGLE_STRIP);
+    const segs = 10, hem = -22;
+    for (let i = 0; i <= segs; i++) {
+      const x = -half + 3 + (F - 6) * i / segs;
+      vertex(x, -H, 0);
+      const wave = Math.sin(x * 0.11 + sim.t * 0.02) * 1.2;
+      vertex(x, hem + wave, 0);
+    }
+    endShape();
+    pop();
+  }
+
+  // gantry + NoIR camera
+  stroke(150, 160, 180); strokeWeight(2.2); noFill();
+  const g = CONFIG.camH;
+  line(-half-4, -g, 0, -4, -g, 0); line(4, -g, 0, half+4, -g, 0);
+  line(0, -g, 0, 0, -H-2, 0);
+
+  push(); noStroke();
+  translate(0, -CONFIG.camH + 2, 0);
+  fill(30, 34, 44); box(7, 4, 7);
+  fill(10, 12, 16);
+  translate(0, 1.6, 2.6); box(5.4, 2.4, 1);
+  pop();
+
+  push(); noStroke();
+  translate(0, -CONFIG.camH + 4, 0);
+  fill(120, 190, 255, 14);
+  cone(52, CONFIG.camH - 4, 24, 3, true);
+  pop();
+
+  push(); noStroke();
+  for (const [ix, iz] of [[-14,-14],[14,-14],[-14,14],[14,14]]) {
+    push(); translate(ix, -CONFIG.camH + 2, iz);
+    fill(50, 44, 40); box(3.4, 2.4, 3.4);
+    fill(255, 123, 61); translate(0, 0.6, 1.4); box(2.2, 1.4, 0.5);
+    pop();
+  }
+  pop();
+
+  // heat lamp
+  push();
+  translate(0, -52, 0);
+  noStroke(); fill(45, 45, 52);
+  cone(9, 7, 18, 4, false);
+  translate(0, 6.2, 0);
+  const glow = sim.lampPWM;
+  fill(255, lerp(60, 200, glow), lerp(40, 90, glow));
+  sphere(3.6, 12, 8);
+  pop();
+  stroke(70); strokeWeight(0.7); noFill();
+  line(0, -52, 0, 0, -CONFIG.camH + 1, 0);
+
+  // control box with alert LED
+  push(); noStroke();
+  translate(half + 3, -12, -14);
+  fill(24, 26, 32); box(9, 12, 3.2);
+  const hasAlert = sim.alerts.length > 1 || sim.alerts[0] !== 'none';
+  if (hasAlert && sin(sim.t * 0.3) > 0) fill(255, 60, 60);
+  else fill(255, 209, 102, 230);
+  translate(-3.4, -3.5, 1.8); box(1.2, 1.2, 0.4);
+  pop();
+  push();
+  translate(half + 3, -12, -14);
+  fill(255, 209, 102); textSize(5); textAlign(CENTER);
+  rotateY(HALF_PI); text('Pi 5 + dimmer', 0, 0, 0);
+  pop();
+
+  // DS18B20 floor array
+  push(); noStroke();
+  for (const [sx, sz] of [[-25,-25],[25,-25],[-25,25],[25,25]]) {
+    push(); translate(sx, -0.6, sz);
+    fill(78, 201, 176); sphere(1.5, 8, 6);
+    stroke(78, 201, 176); strokeWeight(0.5); noFill();
+    line(0, 0, 0, 0, -6, 0);
+    pop();
+  }
+  pop();
+
+  // DHT22 + MQ-137
+  push(); noStroke();
+  translate(-half + 2, -10, 12);
+  fill(197, 143, 255); box(2.6, 4.4, 1.4);
+  pop();
+  push(); noStroke();
+  translate(-half + 2, -8, -16);
+  fill(150, 90, 200); cylinder(2.4, 5.2, 10);
+  fill(120, 120, 130); translate(0, 3.4, 0); cylinder(1.6, 1.2, 8);
+  pop();
+
+  // exhaust fan
+  push();
+  translate(0, -14, half);
+  stroke(140, 148, 160); strokeWeight(1); noFill();
+  circle(0, 0, 14);
+  const fanOn = sim.nh3 > 25;
+  const spin = fanOn ? sim.t * 0.5 : sim.t * 0.04;
+  push(); noStroke(); fill(fanOn ? 130 : 90, fanOn ? 200 : 96, fanOn ? 160 : 108);
+  translate(0, 0, -0.5); rotateX(spin);
+  box(12, 1.6, 0.5);
+  pop();
+  pop();
+
+  if (sim.forced === 'DRAFT') {
+    push(); noStroke();
+    translate(-half + 6, -12, -half + 6);
+    fill(140, 190, 255, 26);
+    cone(16, 34, 20, 3, false);
+    pop();
+  }
+}
+
+function drawCrowdPulse(isLive) {
+  if (!sim.crowdActive) return;   // driven by the hard rule, not the classifier
+  const pts = isLive ? liveDots.map(d => [d.x, d.z]) : chicks.map(c => [c.pos.x, c.pos.z]);
+  const c = flockCentroid(pts);
+  const pulse = 10 + 8 * abs(sin(sim.t * 0.12));
+  push();
+  translate(c.x, -1.4, c.z);
+  noFill(); stroke(255, 90, 70, 220); strokeWeight(1.6);
+  circle(0, 0, pulse * 2);
+  stroke(255, 90, 70, 90); strokeWeight(0.8);
+  circle(0, 0, pulse * 2.9);
+  pop();
+}
+
+function drawHeat(isLive) {
+  push(); noStroke();
+  translate(0, -1.6, 0);
+  const r = lerp(26, 46, sim.lampPWM);
+  fill(255, lerp(70, 170, sim.lampPWM), 40, 20 + sim.lampPWM * 22);
+  circle(0, 0, r * 2);
+  pop();
+}
+
+function drawHUD() {
+  const r = sim.stats || { nnd: 0, entropyN: 0, cellFrac: 0, clarkEvans: 1 };
+  const isLive = sim.forced === 'LIVE';
+  const scenEl = document.getElementById('h-scen');
+  scenEl.textContent = isLive
+    ? 'LIVE' + (liveFresh ? ' · ' + liveDots.length + ' detections' : ' · waiting for data')
+    : (sim.mode === 'auto' ? 'AUTO · ' : '') + SCENARIOS[sim.forced].label;
+  scenEl.style.color = isLive ? '#4ec9b0' : (SCENARIOS[sim.forced].danger ? '#ff7b72' : '#7ee787');
+
+  document.getElementById('h-count').textContent =
+    isLive ? liveDots.length : chicks.length;
+  document.getElementById('h-day').textContent = sim.day;
+  document.getElementById('h-base').textContent = sim.baseline.toFixed(1) + '°C';
+  const trimEl = document.getElementById('h-trim');
+  trimEl.textContent = (sim.trim >= 0 ? '+' : '') + sim.trim.toFixed(1) + '°C';
+  trimEl.style.color = Math.abs(sim.trim) >= PLAN.trimLimit ? '#ff7b72' : '#7ee787';
+  document.getElementById('h-set').textContent = sim.setpoint.toFixed(1) + '°C';
+  document.getElementById('h-floor').textContent = sim.floorT.toFixed(1) + '°C';
+  document.getElementById('h-nnd').textContent = r.nnd.toFixed(1) + ' cm';
+  document.getElementById('h-ent').textContent = r.entropyN.toFixed(2);
+  document.getElementById('h-r').textContent = r.clarkEvans.toFixed(2);
+  const cellEl = document.getElementById('h-cell');
+  cellEl.textContent = (r.cellFrac * 100).toFixed(0) + '%';
+  cellEl.style.color = r.cellFrac >= PLAN.crowdCellFrac ? '#ff7b72' : '#7ee787';
+  document.getElementById('h-lamp').textContent = Math.round(sim.lampPWM * 100) + ' %';
+
+  const nh3El = document.getElementById('h-nh3');
+  nh3El.textContent = sim.nh3.toFixed(0) + ' ppm';
+  nh3El.style.color = sim.nh3 >= PLAN.nh3On ? '#ff7b72' : '#7ee787';
+
+  const fanEl = document.getElementById('h-fan');
+  fanEl.textContent = sim.nh3 >= PLAN.nh3On ? 'ON' : 'OFF';
+  fanEl.style.color = sim.nh3 >= PLAN.nh3On ? '#ff7b72' : '#7ee787';
+
+  const st = STATES[sim.classState];
+  const el = document.getElementById('h-state');
+  el.textContent = st.name; el.style.color = st.col;
+
+  const crEl = document.getElementById('h-crowd');
+  if (sim.crowdActive) { crEl.textContent = 'ALARM — ack needed'; crEl.style.color = '#ff7b72'; }
+  else if (sim.crowdStreak > 0) { crEl.textContent = 'streak ' + sim.crowdStreak + '/' + PLAN.crowdWindows; crEl.style.color = '#ffcc66'; }
+  else { crEl.textContent = 'clear'; crEl.style.color = '#7ee787'; }
+
+  const al = document.getElementById('h-alert');
+  al.textContent = sim.alerts.join(' · ');
+  al.className = (sim.alerts.length === 1 && sim.alerts[0] === 'none') ? 'stat' : 'warn';
+}
+
+// register service worker so the app works offline + installs as PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('[sw] registered'))
+      .catch(err => console.warn('[sw] failed:', err));
+  });
+}
+
+// ===== INTERACTION =====
+function mousePressed() { dragging = true; lastX = mouseX; lastY = mouseY; }
+function mouseReleased() { dragging = false; }
+function mouseDragged() {
+  if (!dragging) return;
+  camAng -= (mouseX - lastX) * 0.007;
+  camElev = constrain(camElev + (mouseY - lastY) * 0.004, 0.08, 1.35);
+  lastX = mouseX; lastY = mouseY;
+}
+function mouseWheel(e) { camDist = constrain(camDist + e.delta * 0.15, 90, 420); return false; }
+function keyPressed() {
+  const k = key.toUpperCase();
+  if (k === 'S') saveCanvas('thermohuddle_model', 'png');
+  if (k === 'A') setScenario('AUTO');
+  if (k === 'L') setScenario('LIVE');
+  if (k === 'N') { sim.day = (sim.day % 14) + 1; sim.trim = 0; }   // advance brooding day
+  const map = { '1': 'COMFY', '2': 'COLD', '3': 'HOT', '4': 'DRAFT', '5': 'CROWD', '6': 'LAMPFAIL', '7': 'AMMONIA' };
+  if (map[k]) setScenario(map[k]);
+}
+</script>
+</body>
+</html>

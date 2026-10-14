@@ -1,0 +1,14 @@
+# secrets — never commit credentials
+broker.js
+broker_err*.txt
+
+# runtime data — chick captures and logs, not code
+tracking_latest.json
+*.log
+frames/
+__pycache__/
+*.pyc
+.DS_Store
+
+# local test artifacts
+replay_results.json

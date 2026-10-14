@@ -1,0 +1,19 @@
+# ThermoHuddle — Mosquitto broker config example
+# Put in /etc/mosquitto/conf.d/thermohuddle.conf on the Pi (or your VPS),
+# then: systemctl restart mosquitto
+
+# Standard MQTT (TCP) — the Pi pipeline publishes here
+listener 1883
+protocol mqtt
+
+# WebSocket listener — the browser app subscribes here (MQTT-over-WS)
+listener 9001
+protocol websockets
+
+# For the pilot: open broker on the LAN. For production/remote: add auth!
+allow_anonymous true
+# password_file /etc/mosquitto/passwd
+#   (create with: mosquitto_passwd -c /etc/mosquitto/passwd <user>)
+# and for remote/internet exposure terminate TLS in front (nginx + certs)
+# or use a managed cloud broker (HiveMQ Cloud free tier, EMQX Cloud) which
+# gives you wss:// endpoints out of the box.

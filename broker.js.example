@@ -1,0 +1,17 @@
+// ThermoHuddle broker.js EXAMPLE — copy to broker.js and edit, keep out of git!
+// The app's "⚡ Connect MQTT" button fetches this file automatically.
+// Restart the app (or toggle the button) after editing.
+
+window.BROKER = {
+  // MQTT-over-WebSocket URL. Use ws:// on LAN, wss:// (TLS) for internet.
+  // Local pilot (mosquitto on the Pi):      ws://192.168.1.50:9001
+  // Managed cloud broker (HiveMQ free tier): wss://<your-cluster>.hivemq.cloud:8884/mqtt
+  url: "ws://192.168.1.50:9001",
+
+  // Optional auth — REQUIRED if the broker is reachable from the internet
+  username: "thermohuddle",
+  password: "change-me",
+
+  // Topic the Pi pipeline publishes telemetry on (must match thermohuddle_draft.py)
+  topic: "thermohuddle/telemetry",
+};
