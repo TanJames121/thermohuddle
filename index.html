@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ThermoHuddle — Flock Monitor</title>
+<script src="p5.min.js"></script>
+<script src="mqtt.min.js"></script>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#eaf8c2">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ThermoHuddle">
+<style>
+  :root {
+    --bg: #eaf8c2;          /* sage cream */
+    --bg2: #f8f8f0;         /* off-white card */
+    --card: #ffffff;
+    --card-edge: #dfe7e3;
+    --ink: #2a2e24;         /* near-black green ink */
+    --sub: #6f7561;
+    --green: #7fae55;       /* soft green accent */
+    --green-soft: #dcf0b4;
+    --red: #dc0014;         /* alert red */
+    --red-soft: #fdecec;
+    --amber: #c98a00;
+    --amber-soft: #fff3d0;
+    --blue: #4a7fb5;
+    --radius: 18px;
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  }
+  #app {
+    display: flex; flex-direction: column; height: 100%;
+    max-width: 480px; margin: 0 auto; position: relative;
+  }
+  canvas#p5canvas { position: absolute; inset: 0; }
+
+  /* ============ TOP BAR ============ */
+  #topbar {
+    position: relative; z-index: 10; flex: 0 0 auto;
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px 10px;
+  }
+  #topbar .logo {
+    width: 38px; height: 38px; border-radius: 12px;
+    background: var(--ink); color: #eaf8c2;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  #topbar .tt { flex: 1; min-width: 0; }
+  #topbar .tt .t1 { font-weight: 700; font-size: 16px; letter-spacing: 0.2px; }
+  #topbar .tt .t2 { color: var(--sub); font-size: 11.5px; margin-top: 1px; }
+  #connchip {
+    font-size: 11px; font-weight: 600; padding: 6px 11px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--card-edge); color: var(--sub);
+    cursor: pointer; user-select: none;
+  }
+  #connchip.on { background: var(--green-soft); border-color: var(--green); color: #3c5a1e; }
+  #connchip.err { background: var(--red-soft); border-color: var(--red); color: var(--red); }
+
+  /* ============ STATE BANNER ============ */
+  #statebanner {
+    position: relative; z-index: 10; flex: 0 0 auto;
+    margin: 0 16px; border-radius: var(--radius);
+    padding: 14px 18px; display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--card-edge);
+    box-shadow: 0 2px 10px rgba(60,70,40,0.06);
+  }
+  #statebanner .dot {
+    width: 12px; height: 12px; border-radius: 50%; background: var(--green);
+    flex: 0 0 auto; box-shadow: 0 0 0 4px rgba(127,174,85,0.25);
+  }
+  #statebanner .sb-main { flex: 1; min-width: 0; }
+  #statebanner .sb-state { font-size: 19px; font-weight: 800; letter-spacing: 0.3px; }
+  #statebanner .sb-sub { font-size: 12px; color: var(--sub); margin-top: 1px; }
+  #statebanner .sb-temp { text-align: right; }
+  #statebanner .sb-temp .v { font-size: 22px; font-weight: 800; }
+  #statebanner .sb-temp .k { font-size: 10.5px; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ============ 3D VIEWPORT ============ */
+  #viewport {
+    position: relative; z-index: 5; flex: 1 1 auto; min-height: 180px;
+    margin: 12px 16px; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--card-edge);
+  }
+  #viewport canvas { display: block; }
+  #vplabel {
+    position: absolute; top: 10px; left: 12px; z-index: 2;
+    font-size: 11px; font-weight: 700; color: #ffffff;
+    background: rgba(30,34,24,0.55); padding: 5px 10px; border-radius: 999px;
+    backdrop-filter: blur(4px);
+  }
+  #vpbtns { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; }
+  .vpb {
+    width: 34px; height: 34px; border-radius: 12px; border: 1px solid var(--card-edge);
+    background: rgba(255,255,255,0.85); color: var(--ink); font-size: 15px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .vpb:active { transform: scale(0.93); }
+
+  /* ============ BOTTOM SHEET (stats + pages) ============ */
+  #sheet {
+    position: relative; z-index: 10; flex: 0 0 auto;
+    background: var(--bg2); border-radius: 26px 26px 0 0;
+    border-top: 1px solid var(--card-edge);
+    box-shadow: 0 -4px 18px rgba(60,70,40,0.08);
+    display: flex; flex-direction: column;
+    max-height: 46vh;
+  }
+  #sheet .grab { width: 42px; height: 5px; border-radius: 3px; background: #c9cfbe; margin: 8px auto 2px; }
+  #pages { flex: 1 1 auto; overflow-y: auto; padding: 6px 16px 8px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* stats grid */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat {
+    background: var(--card); border: 1px solid var(--card-edge);
+    border-radius: 14px; padding: 9px 6px 8px; text-align: center;
+  }
+  .stat .v { font-size: 15px; font-weight: 800; }
+  .stat .k { font-size: 8.8px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px; }
+  .stat.warn .v { color: var(--red); }
+  .stat.good .v { color: #3c5a1e; }
+
+  /* wide row chips */
+  .chips { display: flex; gap: 8px; margin-top: 8px; }
+  .chip {
+    flex: 1; background: var(--card); border: 1px solid var(--card-edge);
+    border-radius: 14px; padding: 10px 12px;
+  }
+  .chip .k { font-size: 9.5px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.8px; }
+  .chip .v { font-size: 15px; font-weight: 800; margin-top: 2px; }
+  .chip.warn { background: var(--red-soft); border-color: var(--red); }
+  .chip.warn .v { color: var(--red); }
+  .chip.amber { background: var(--amber-soft); border-color: var(--amber); }
+  .chip.amber .v { color: var(--amber); }
+
+  /* crowding alarm card */
+  #crowdcard {
+    display: none; margin-top: 8px;
+    background: var(--red-soft); border: 1px solid var(--red);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  #crowdcard.show { display: block; }
+  #crowdcard .ct { color: var(--red); font-weight: 800; font-size: 14px; }
+  #crowdcard .cs { color: #8c1a20; font-size: 11.5px; margin-top: 3px; }
+
+  /* history chart */
+  #histpage canvas { width: 100%; border-radius: 14px; background: #14170f; }
+
+  /* logs */
+  .logline {
+    padding: 7px 10px; border-left: 3px solid var(--card-edge);
+    background: var(--card); border-radius: 8px;
+    margin: 6px 0; font-size: 11.5px; font-family: ui-monospace, Consolas, monospace;
+  }
+  .logline .t { color: var(--sub); margin-right: 7px; font-size: 10.5px; }
+  .logline.warn { border-left-color: var(--red); background: var(--red-soft); }
+  .logline.info { border-left-color: var(--green); }
+
+  /* ============ BOTTOM NAV ============ */
+  #nav {
+    flex: 0 0 auto; display: flex; z-index: 10;
+    background: var(--card); border-top: 1px solid var(--card-edge);
+    padding: 8px 6px calc(10px + env(safe-area-inset-bottom));
+  }
+  .navbtn {
+    flex: 1; text-align: center; padding: 5px 0; cursor: pointer;
+    color: var(--sub); user-select: none;
+  }
+  .navbtn .ic { font-size: 19px; display: block; }
+  .navbtn .lb { font-size: 9.5px; font-weight: 600; letter-spacing: 0.3px; }
+  .navbtn.active { color: var(--ink); }
+  .navbtn.active .ic { transform: scale(1.08); }
+
+  /* scenario sheet (secondary, slides over) */
+  #scensheet {
+    position: absolute; inset: 0; z-index: 30; display: none;
+    background: rgba(42,46,36,0.35); backdrop-filter: blur(3px);
+  }
+  #scensheet.open { display: block; }
+  #scensheet .inner {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--bg2); border-radius: 26px 26px 0 0;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  #scensheet .inner h3 { margin: 2px 4px 10px; font-size: 14px; }
+  .scengrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .scen {
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 14px;
+    padding: 12px 4px; text-align: center; cursor: pointer; font-size: 11px; font-weight: 600;
+    color: var(--ink);
+  }
+  .scen .e { font-size: 20px; display: block; margin-bottom: 3px; }
+  .scen.active { background: var(--green-soft); border-color: var(--green); }
+  .scen.danger.active { background: var(--red-soft); border-color: var(--red); }
+  .scenrow2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="logo">🐤</div>
+    <div class="tt">
+      <div class="t1">ThermoHuddle</div>
+      <div class="t2" id="subtitle">Day 1 · baseline 34.0°C</div>
+    </div>
+    <div id="connchip" title="Connect MQTT (broker.js or same-host:9001)">⚡ offline</div>
+  </div>
+
+  <div id="statebanner">
+    <div class="dot" id="sbdot"></div>
+    <div class="sb-main">
+      <div class="sb-state" id="sbstate">COMFORTABLE</div>
+      <div class="sb-sub" id="sbsub">flock evenly distributed · trim +0.0°C</div>
+    </div>
+    <div class="sb-temp">
+      <div class="v" id="sbtemp">32.5°</div>
+      <div class="k">floor</div>
+    </div>
+  </div>
+
+  <div id="viewport">
+    <canvas id="p5canvas"></canvas>
+    <div id="vplabel">🥚 3D brooder</div>
+    <div id="vpbtns">
+      <div class="vpb" id="btnscen" title="Scenarios">🎛</div>
+      <div class="vpb" id="btndark" title="Dark mode">🌙</div>
+      <div class="vpb" id="btnsnap" title="Save PNG">📸</div>
+    </div>
+  </div>
+
+  <div id="sheet">
+    <div class="grab"></div>
+    <div id="pages">
+
+      <div class="page active" id="page-stats">
+        <div class="stats">
+          <div class="stat"><div class="v" id="m-set">34.0°</div><div class="k">setpoint</div></div>
+          <div class="stat"><div class="v" id="m-nnd">—</div><div class="k">nnd</div></div>
+          <div class="stat"><div class="v" id="m-ent">—</div><div class="k">entropy</div></div>
+          <div class="stat"><div class="v" id="m-r">—</div><div class="k">clark R</div></div>
+          <div class="stat"><div class="v" id="m-duty">80%</div><div class="k">lamp duty</div></div>
+          <div class="stat"><div class="v" id="m-nh3">6</div><div class="k">nh₃ ppm</div></div>
+          <div class="stat"><div class="v" id="m-count">50</div><div class="k">chicks</div></div>
+          <div class="stat" id="m-cellwrap"><div class="v" id="m-cell">—</div><div class="k">max cell</div></div>
+        </div>
+        <div class="chips">
+          <div class="chip"><div class="k">baseline</div><div class="v" id="c-base">34.0°C</div></div>
+          <div class="chip" id="c-trimwrap"><div class="k">behavioral trim</div><div class="v" id="c-trim">+0.0°C</div></div>
+          <div class="chip" id="c-crowdwrap"><div class="k">crowding rule</div><div class="v" id="c-crowd">clear</div></div>
+        </div>
+        <div id="crowdcard">
+          <div class="ct">⚠ CROWDING ALARM — acknowledge required</div>
+          <div class="cs">Alarm + ventilation burst + notification sent · re-alerts every 5 min until acknowledged.</div>
+        </div>
+      </div>
+
+      <div class="page" id="page-hist">
+        <canvas id="histcanvas" width="720" height="260"></canvas>
+      </div>
+
+      <div class="page" id="page-logs">
+        <div id="logbody"></div>
+      </div>
+
+      <div class="page" id="page-warn">
+        <div id="warnbody"></div>
+      </div>
+
+    </div>
+
+    <div id="nav">
+      <div class="navbtn active" data-p="stats"><span class="ic">📊</span><span class="lb">Stats</span></div>
+      <div class="navbtn" data-p="hist"><span class="ic">📈</span><span class="lb">History</span></div>
+      <div class="navbtn" data-p="logs"><span class="ic">🗒</span><span class="lb">Logs</span></div>
+      <div class="navbtn" data-p="warn"><span class="ic">⚠️</span><span class="lb">Warnings</span></div>
+    </div>
+  </div>
+
+  <div id="scensheet">
+    <div class="inner">
+      <h3>Scenarios <span style="color:var(--sub);font-weight:400;font-size:11px">· tap outside to close · N = next day</span></h3>
+      <div class="scengrid">
+        <div class="scen" data-s="COMFY"><span class="e">🌤</span>Comfy</div>
+        <div class="scen" data-s="COLD"><span class="e">🥶</span>Cold</div>
+        <div class="scen" data-s="HOT"><span class="e">🥵</span>Hot</div>
+        <div class="scen" data-s="DRAFT"><span class="e">💨</span>Draft</div>
+      </div>
+      <div class="scenrow2">
+        <div class="scen danger" data-s="CROWD"><span class="e">⚠️</span>Crowding</div>
+        <div class="scen danger" data-s="LAMPFAIL"><span class="e">🔌</span>Lamp fail</div>
+        <div class="scen danger" data-s="AMMONIA"><span class="e">☣️</span>NH₃ spike</div>
+      </div>
+      <div class="scenrow2">
+        <div class="scen" data-s="AUTO"><span class="e">▶️</span>Auto cycle</div>
+        <div class="scen" data-s="LIVE"><span class="e">◉</span>LIVE data</div>
+        <div class="scen" data-s="DAY"><span class="e">📅</span>Next day</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+p5.disableFriendlyErrors = true;
+
+// ================= ENGINE (same logic as brooder_tracker, mobile skin) =================
+const CONFIG = { nChicks: 50, floor: 100, wallH: 40, camH: 95, seed: 7 };
+const STATES = {
+  COMFY: { name: 'COMFORTABLE', col: '#7fae55', ink: '#3c5a1e' },
+  COLD:  { name: 'TOO COLD',    col: '#4a7fb5', ink: '#2a4a6e' },
+  HOT:   { name: 'TOO HOT',     col: '#dc0014', ink: '#8c1a20' },
+  DRAFT: { name: 'DRAFT',       col: '#7f9db5', ink: '#3a4a5e' },
+};
+const SCEN = {
+  COMFY:    { label: 'Comfortable' },
+  COLD:     { label: 'Too cold' },
+  HOT:      { label: 'Too hot' },
+  DRAFT:    { label: 'Draft' },
+  CROWD:    { label: 'Crowding', danger: true },
+  LAMPFAIL: { label: 'Lamp failure', danger: true },
+  AMMONIA:  { label: 'Ammonia spike', danger: true },
+  LIVE:     { label: 'LIVE tracking' },
+  AUTO:     { label: 'Auto cycle' },
+};
+const AUTO_ORDER = ['COMFY','COLD','HOT','DRAFT','CROWD','LAMPFAIL','AMMONIA'];
+const CYCLE_FRAMES = 560;
+const PLAN = {
+  baseDay1: 34.0, baseDay14: 29.0,
+  trimStep: 0.5, trimLimit: 2.0,
+  crowdCellFrac: 0.45, crowdWindows: 3,
+  nh3On: 25, nh3Off: 15, nh3Crit: 50,
+};
+const STATE_COLORS = { COMFY: '#7fae55', COLD: '#4a7fb5', HOT: '#dc0014', DRAFT: '#7f9db5' };
+function baselineForDay(day) {
+  const d = Math.min(Math.max(day, 1), 14);
+  return PLAN.baseDay1 + (d - 1) / 13 * (PLAN.baseDay14 - PLAN.baseDay1);
+}
+
+let chicks = [], liveDots = [], liveFresh = false;
+let sim = { t: 0, mode: 'auto', forced: 'COMFY', day: 1,
+            baseline: 34.0, trim: 0, setpoint: 34.0, lampPWM: 0.8,
+            floorT: 32.5, classState: 'COMFY', holdTimer: 0, nh3: 6,
+            crowdStreak: 0, crowdActive: false, crowdAlertAt: 0, crowdGrace: 0,
+            stats: null };
+let DARKMODE = false;
+let camAng = -0.65, camElev = 0.42, camDist = 210;
+let dragging = false, lastX = 0, lastY = 0;
+
+// history + logs
+const HIST = {
+  max: 600, floorT: [], setpoint: [], state: [],
+  push(a, b, c) {
+    this.floorT.push(a); this.setpoint.push(b); this.state.push(c);
+    if (this.floorT.length > this.max) { this.floorT.shift(); this.setpoint.shift(); this.state.shift(); }
+  },
+};
+const LOGS = {
+  max: 200, info: [], warn: [],
+  log(kind, msg) {
+    const e = { t: new Date(), msg };
+    (kind === 'warn' ? this.warn : this.info).push(e);
+    if (this.info.length > this.max) this.info.shift();
+    if (this.warn.length > this.max) this.warn.shift();
+  },
+};
+
+// ================= P5 SETUP =================
+function setup() {
+  const c = document.getElementById('p5canvas');
+  const w = document.getElementById('viewport');
+  const cnv = createCanvas(w.clientWidth, w.clientHeight, WEBGL);
+  cnv.parent('viewport');
+  randomSeed(CONFIG.seed); noiseSeed(CONFIG.seed);
+  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+  setAttributes('antialias', true);
+  for (let i = 0; i < CONFIG.nChicks; i++) chicks.push(new Chick());
+  assignHomes();
+  window.addEventListener('resize', () => {
+    resizeCanvas(w.clientWidth, w.clientHeight);
+  });
+}
+
+function assignHomes() {
+  const per = [];
+  for (let i = 0; i < 52; i++) {
+    const side = i % 4;
+    const t = -42 + 84 * ((Math.floor(i / 4) + random(-0.35, 0.35)) / 13);
+    if (side === 0) per.push(createVector(t, 0, -42));
+    else if (side === 1) per.push(createVector(42, 0, t));
+    else if (side === 2) per.push(createVector(t, 0, 42));
+    else per.push(createVector(-42, 0, t));
+  }
+  per.sort(() => random() - 0.5);
+  const gridPts = [];
+  for (let gz = 0; gz < 8; gz++)
+    for (let gx = 0; gx < 7; gx++)
+      gridPts.push(createVector(map(gx, 0, 6, -40, 40) + random(-4, 4), 0,
+                                map(gz, 0, 7, -42, 42) + random(-4, 4)));
+  gridPts.sort(() => random() - 0.5);
+  chicks.forEach((c, i) => { c.home = per[i % per.length]; c.comfyHome = gridPts[i % gridPts.length]; });
+}
+
+class Chick {
+  constructor() {
+    this.pos = createVector(random(-46, 46), 0, random(-46, 46));
+    this.vel = createVector(random(-0.3, 0.3), 0, random(-0.3, 0.3));
+    this.chirp = random(1000);
+    const ca = random(TWO_PI), cr = Math.sqrt(random()) * 14;
+    this.coldSpot = createVector(Math.cos(ca) * cr, 0, -6 + Math.sin(ca) * cr);
+    this.draftSpot = createVector(random(10, 42), 0, random(10, 42));
+  }
+  update(target, urgency, wander) {
+    wander = wander === undefined ? 0.05 : wander;
+    const seek = p5.Vector.sub(target, this.pos);
+    seek.y = 0; seek.limit(urgency);
+    const ang = this.chirp + noise(sim.t * 0.02 + this.chirp * 1.7) * TWO_PI * 1.4;
+    const n = wander * noise(sim.t * 0.013 + this.chirp);
+    this.vel.add(seek);
+    this.vel.add(createVector(Math.cos(ang) * n, 0, Math.sin(ang) * n));
+    this.vel.limit(0.55);
+    this.pos.add(this.vel);
+    this.pos.x = constrain(this.pos.x, -CONFIG.floor/2 + 4, CONFIG.floor/2 - 4);
+    this.pos.z = constrain(this.pos.z, -CONFIG.floor/2 + 4, CONFIG.floor/2 - 4);
+  }
+  display() { drawChickBody(this.pos.x, this.pos.z, '#fffdf4', '#e8c99a'); }
+}
+function drawDot(x, z) { drawChickBody(x, z, '#d3f0b8', '#7fae55'); }
+function drawChickBody(x, z, bodyCol, beakCol) {
+  push();
+  translate(x, -1.2, z);
+  noStroke();
+  fill(bodyCol);
+  sphere(2.2, 10, 8);
+  translate(0, 1.4, 1.6);
+  fill(beakCol);
+  sphere(1.3, 8, 6);
+  pop();
+}
+
+// ================= SIMULATION (plan-aligned) =================
+function updateSim() {
+  sim.t++;
+  const prevClass = sim.classState, prevCrowd = sim.crowdActive;
+
+  if (sim.mode === 'auto' && sim.forced !== 'LIVE') {
+    sim.forced = AUTO_ORDER[Math.floor(sim.t / CYCLE_FRAMES) % AUTO_ORDER.length];
+  }
+  if (sim.forced === 'LIVE') {
+    classifyFromPositions(liveDots.map(d => [d.x, d.z]));
+  } else {
+    applyBehavior(sim.forced);
+  }
+
+  // control model
+  if (sim.forced !== 'LIVE') {
+    sim.baseline = baselineForDay(sim.day);
+    const envLoad = { COMFY: 0, COLD: 4, HOT: -2.5, DRAFT: 2, CROWD: 0, LAMPFAIL: 0, AMMONIA: 0, LIVE: 0 }[sim.forced] || 0;
+    const trimStepFor = { COLD: +0.5, HOT: -0.5, DRAFT: +0.5, COMFY: 0.0 };
+    const step = trimStepFor[sim.classState] || 0.0;
+    if (sim.t % 40 === 0) sim.trim = constrain(sim.trim + step, -PLAN.trimLimit, PLAN.trimLimit);
+    sim.setpoint = sim.baseline + sim.trim;
+    if (sim.forced === 'LAMPFAIL') sim.lampPWM = lerp(sim.lampPWM, 0.08, 0.08);
+    else sim.lampPWM = constrain(sim.lampPWM + (sim.setpoint - sim.floorT) * 0.012, 0, 1);
+    const eq = 26 + sim.lampPWM * 9 - envLoad;
+    sim.floorT = lerp(sim.floorT, eq, 0.03);
+  } else {
+    sim.setpoint = sim.baseline + sim.trim;
+  }
+
+  // crowding hard rule
+  if (sim.stats) {
+    const f = sim.stats.cellFrac;
+    if (f >= PLAN.crowdCellFrac) {
+      if (!sim.crowdActive) sim.crowdStreak++;
+      sim.crowdGrace = 0;
+    } else if (f < PLAN.crowdCellFrac * 0.8) sim.crowdStreak = 0;
+  }
+  if (!sim.crowdActive && sim.crowdStreak >= PLAN.crowdWindows) {
+    sim.crowdActive = true; sim.crowdAlertAt = sim.t;
+  } else if (sim.crowdActive && sim.t - sim.crowdAlertAt > 60 * 5) {
+    sim.crowdAlertAt = sim.t;
+  }
+  if (sim.crowdActive) {
+    sim.crowdGrace = (sim.crowdGrace || 0) + 1;
+    if (sim.crowdGrace >= 90) { sim.crowdActive = false; sim.crowdGrace = 0; }
+  }
+
+  sim.nh3 = lerp(sim.nh3, sim.forced === 'AMMONIA' ? 42 : 6, sim.forced === 'AMMONIA' ? 0.06 : 0.02);
+
+  // history + logs
+  if (sim.t % 60 === 0) HIST.push(sim.floorT, sim.setpoint, sim.classState);
+  if (sim.classState !== prevClass)
+    LOGS.log('info', `state → ${sim.classState} (floor ${sim.floorT.toFixed(1)}°C, sp ${sim.setpoint.toFixed(1)}°C)`);
+  if (sim.crowdActive && !prevCrowd)
+    LOGS.log('warn', `CROWDING ALARM — max cell ${(sim.stats.cellFrac*100).toFixed(0)}% · vent burst`);
+  else if (prevCrowd && !sim.crowdActive)
+    LOGS.log('info', 'crowding alarm cleared (dispersal)');
+  if (sim.nh3 >= PLAN.nh3Crit && sim.t % 60 === 0)
+    LOGS.log('warn', `NH₃ CRITICAL ${sim.nh3.toFixed(0)} ppm`);
+  else if (sim.nh3 >= PLAN.nh3On && sim.t % 120 === 0)
+    LOGS.log('warn', `NH₃ ${sim.nh3.toFixed(0)} ppm — vent ON`);
+  if (sim.forced === 'LAMPFAIL' && sim.t % 300 === 0)
+    LOGS.log('warn', 'LAMP FAILURE — duty≈0, floor cooling');
+}
+
+function applyBehavior(mode) {
+  for (const c of chicks) {
+    switch (mode) {
+      case 'COLD': case 'LAMPFAIL': c.update(c.coldSpot, 0.10, 0.03); break;
+      case 'HOT': c.update(c.home || createVector(0,0,0), 0.10, 0.02); break;
+      case 'DRAFT': c.update(c.draftSpot, 0.08, 0.03); break;
+      case 'CROWD': c.update(createVector(10, 0, 4), 0.15, 0.10); break;
+      case 'AMMONIA': c.update(createVector(0, 0, -8), 0.05, 0.05); break;
+      default: c.update(c.comfyHome || createVector(0,0,0), 0.04, 0.10);
+    }
+  }
+  for (let i = 0; i < chicks.length; i++) {
+    for (let j = i + 1; j < chicks.length; j++) {
+      const a = chicks[i].pos, b = chicks[j].pos;
+      const dx = a.x - b.x, dz = a.z - b.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > 0.001 && d2 < 9) {
+        const d = Math.sqrt(d2), push = (3 - d) * 0.35;
+        const nx = dx / d, nz = dz / d;
+        a.x += nx * push; a.z += nz * push;
+        b.x -= nx * push; b.z -= nz * push;
+      }
+    }
+  }
+  classifyFromPositions(chicks.map(c => [c.pos.x, c.pos.z]));
+}
+
+function classifyFromPositions(pts) {
+  const r = computeStatsPts(pts);
+  if (r.s === sim.classState) sim.holdTimer = 0; else sim.holdTimer++;
+  if (sim.holdTimer > 45) { sim.classState = r.s; sim.holdTimer = 0; }
+  sim.stats = r;
+}
+
+function computeStatsPts(pts) {
+  const N = pts.length;
+  if (N === 0) return { s: sim.classState, nnd: 0, entropyN: 0, centroidDist: 0, centerOcc: 0, cellFrac: 0, clarkEvans: 1 };
+  let nndSum = 0;
+  for (let i = 0; i < N; i++) {
+    let best = 1e9;
+    for (let j = 0; j < N; j++) if (i !== j) {
+      const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+      if (d < best) best = d;
+    }
+    nndSum += best;
+  }
+  const nnd = nndSum / N;
+  const expected = 0.5 * Math.sqrt(1.0 / N);
+  const clarkEvans = (nnd / 100) / expected;
+  const G = 4, counts = new Array(G * G).fill(0);
+  for (const p of pts) {
+    const gx = constrain(Math.floor((p[0] + 50) / 100 * G), 0, G - 1);
+    const gz = constrain(Math.floor((p[1] + 50) / 100 * G), 0, G - 1);
+    counts[gz * G + gx]++;
+  }
+  let H = 0, maxCell = 0;
+  for (const k of counts) { if (k > maxCell) maxCell = k; if (k > 0) { const p = k / N; H -= p * log(p); } }
+  const entropyN = H / log(G * G);
+  const cellFrac = maxCell / N;
+  let cx = 0, cz = 0, inCenter = 0;
+  for (const p of pts) { cx += p[0]; cz += p[1]; if (Math.hypot(p[0], p[1]) < 20) inCenter++; }
+  const centroidDist = Math.hypot(cx / N, cz / N);
+  const centerOcc = inCenter / N;
+  const cold = sim.floorT < 31.5;
+  if (centroidDist > 15 && entropyN < 0.75) return { s: 'DRAFT', nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+  if (centerOcc < 0.06 && entropyN > 0.80)   return { s: 'HOT', nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+  if (nnd < 5.0 && cold)                      return { s: 'COLD', nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+  return { s: 'COMFY', nnd, entropyN, centroidDist, centerOcc, cellFrac, clarkEvans };
+}
+
+// ================= SCENE =================
+function draw() {
+  updateSim();
+  updateUI();
+  if (DARKMODE) { background(18, 20, 14); ambientLight(80, 84, 66); }
+  else { background(216, 226, 196); ambientLight(170, 175, 150); }
+  directionalLight(255, 250, 240, -0.4, -1, -0.3);
+  directionalLight(130, 140, 150, 0.5, -0.4, 0.4);
+  const cy = Math.sin(camElev) * camDist, ch = Math.cos(camElev) * camDist;
+  camera(Math.cos(camAng) * ch, -cy, Math.sin(camAng) * ch, 0, -35, 0, 0, 1, 0);
+  drawBrooder();
+  const isLive = sim.forced === 'LIVE';
+  if (isLive) { for (const d of liveDots) drawDot(d.x, d.z); }
+  else { drawCrowdPulse(isLive); for (const c of chicks) c.display(); }
+  drawHeat();
+}
+
+function drawBrooder() {
+  const F = CONFIG.floor, H = CONFIG.wallH, half = F / 2;
+  push(); noStroke();
+  fill(146, 102, 58);
+  for (const [lx, lz] of [[-half+6,-half+6],[half-6,-half+6],[-half+6,half-6],[half-6,half-6]]) {
+    push(); translate(lx, 13, lz); box(4.5, 24, 4.5); pop();
+  }
+  pop();
+  push(); noStroke();
+  fill(120, 85, 50); box(F, 2, F);
+  fill(214, 192, 148); translate(0, -1.1, 0); box(F - 2, 0.6, F - 2);
+  pop();
+  push(); stroke(150, 130, 95); strokeWeight(0.6); noFill();
+  for (let i = 0; i <= 4; i++) {
+    const p = -half + (F / 4) * i;
+    line(p, -1.5, -half, p, -1.5, half);
+    line(-half, -1.5, p, half, -1.5, p);
+  }
+  pop();
+  stroke(146, 102, 58); strokeWeight(3.4); noFill();
+  for (const s of [-1, 1]) {
+    line(s*half, -2, -half, s*half, -H-2, -half);
+    line(s*half, -2,  half, s*half, -H-2,  half);
+    line(-half, -H-1, s*half, half, -H-1, s*half);
+    line(s*half, -H-1, -half, s*half, -H-1, half);
+  }
+  noStroke();
+  for (let side = 0; side < 4; side++) {
+    push();
+    if (side === 1) rotateY(HALF_PI); else if (side === 2) rotateY(PI); else if (side === 3) rotateY(-HALF_PI);
+    translate(0, 0, -half + 1.2);
+    fill(70, 105, 170, 60);
+    beginShape(TRIANGLE_STRIP);
+    for (let i = 0; i <= 10; i++) {
+      const x = -half + 3 + (F - 6) * i / 10;
+      vertex(x, -H, 0);
+      vertex(x, -22 + Math.sin(x * 0.11 + sim.t * 0.02) * 1.2, 0);
+    }
+    endShape(); pop();
+  }
+  // heat lamp
+  push(); translate(0, -52, 0); noStroke(); fill(45, 45, 52);
+  cone(9, 7, 18, 4, false);
+  translate(0, 6.2, 0);
+  fill(255, lerp(60, 200, sim.lampPWM), lerp(40, 90, sim.lampPWM));
+  sphere(3.6, 12, 8); pop();
+  stroke(70); strokeWeight(0.7); noFill(); line(0, -52, 0, 0, -CONFIG.camH + 1, 0);
+}
+
+function drawCrowdPulse(isLive) {
+  if (!sim.crowdActive) return;
+  const pts = isLive ? liveDots.map(d => [d.x, d.z]) : chicks.map(c => [c.pos.x, c.pos.z]);
+  let x = 0, z = 0;
+  for (const p of pts) { x += p[0]; z += p[1]; }
+  if (!pts.length) return;
+  x /= pts.length; z /= pts.length;
+  const pulse = 10 + 8 * Math.abs(Math.sin(sim.t * 0.12));
+  push(); translate(x, -1.4, z);
+  noFill(); stroke(220, 0, 20, 220); strokeWeight(1.6);
+  circle(0, 0, pulse * 2);
+  stroke(220, 0, 20, 90); strokeWeight(0.8);
+  circle(0, 0, pulse * 2.9);
+  pop();
+}
+
+function drawHeat() {
+  push(); noStroke(); translate(0, -1.6, 0);
+  const r = lerp(26, 46, sim.lampPWM);
+  fill(255, lerp(70, 170, sim.lampPWM), 40, 20 + sim.lampPWM * 22);
+  circle(0, 0, r * 2); pop();
+}
+
+// ================= UI BINDING =================
+const $ = id => document.getElementById(id);
+function updateUI() {
+  const r = sim.stats || { nnd: 0, entropyN: 0, cellFrac: 0, clarkEvans: 1 };
+  const st = STATES[sim.classState];
+  // banner
+  $('sbstate').textContent = sim.crowdActive ? 'CROWDING ALARM' : st.name;
+  $('sbstate').style.color = sim.crowdActive ? 'var(--red)' : st.ink;
+  $('sbdot').style.background = sim.crowdActive ? 'var(--red)' : st.col;
+  $('sbdot').style.boxShadow = `0 0 0 4px ${sim.crowdActive ? 'rgba(220,0,20,.2)' : st.col + '40'}`;
+  $('sbsub').textContent = (sim.forced === 'LIVE' ? 'LIVE · ' + liveDots.length + ' tracked · ' : '') +
+    'trim ' + (sim.trim >= 0 ? '+' : '') + sim.trim.toFixed(1) + '°C · duty ' + Math.round(sim.lampPWM*100) + '%';
+  $('sbtemp').textContent = sim.floorT.toFixed(1) + '°';
+  $('subtitle').textContent = 'Day ' + sim.day + ' · baseline ' + sim.baseline.toFixed(1) + '°C';
+  // stats
+  $('m-set').textContent = sim.setpoint.toFixed(1) + '°';
+  $('m-nnd').textContent = r.nnd.toFixed(1);
+  $('m-ent').textContent = r.entropyN.toFixed(2);
+  $('m-r').textContent = r.clarkEvans.toFixed(2);
+  $('m-duty').textContent = Math.round(sim.lampPWM * 100) + '%';
+  $('m-nh3').textContent = sim.nh3.toFixed(0);
+  $('m-nh3').parentElement.classList.toggle('warn', sim.nh3 >= PLAN.nh3On);
+  $('m-count').textContent = sim.forced === 'LIVE' ? liveDots.length : chicks.length;
+  $('m-cell').textContent = (r.cellFrac * 100).toFixed(0) + '%';
+  $('m-cellwrap').classList.toggle('warn', r.cellFrac >= PLAN.crowdCellFrac);
+  $('c-base').textContent = sim.baseline.toFixed(1) + '°C';
+  $('c-trim').textContent = (sim.trim >= 0 ? '+' : '') + sim.trim.toFixed(1) + '°C';
+  const cw = $('c-crowdwrap');
+  if (sim.crowdActive) { cw.className = 'chip warn'; cw.querySelector('.v').textContent = 'ALARM'; }
+  else if (sim.crowdStreak > 0) { cw.className = 'chip amber'; cw.querySelector('.v').textContent = 'streak ' + sim.crowdStreak + '/' + PLAN.crowdWindows; }
+  else { cw.className = 'chip'; cw.querySelector('.v').textContent = 'clear'; }
+  $('crowdcard').classList.toggle('show', sim.crowdActive);
+}
+
+// nav + pages
+document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.navbtn').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + b.dataset.p));
+  if (b.dataset.p === 'hist') renderHist();
+  if (b.dataset.p === 'logs') renderLogs();
+  if (b.dataset.p === 'warn') renderWarn();
+}));
+
+// scenario sheet
+function setScenario(s) {
+  if (s === 'AUTO') { sim.mode = 'auto'; }
+  else if (s === 'DAY') { sim.day = (sim.day % 14) + 1; sim.trim = 0; LOGS.log('info', 'brooding day → ' + sim.day); updateScenActive(); return; }
+  else { sim.mode = 'manual'; sim.forced = s; }
+  if (s !== 'LIVE') { sim.crowdActive = false; sim.crowdStreak = 0; sim.crowdGrace = 0; }
+  LOGS.log('info', 'scenario → ' + s);
+  updateScenActive();
+  $('scensheet').classList.remove('open');
+}
+function updateScenActive() {
+  const active = sim.mode === 'auto' ? 'AUTO' : sim.forced;
+  document.querySelectorAll('.scen').forEach(b =>
+    b.classList.toggle('active', b.dataset.s === active));
+  const lbl = sim.forced === 'LIVE' ? 'LIVE tracking'
+    : (sim.mode === 'auto' ? 'AUTO · ' : '') + (SCEN[sim.forced] ? SCEN[sim.forced].label : sim.forced);
+  $('vplabel').textContent = sim.forced === 'LIVE' ? '◉ LIVE · ' + (liveDots.length || '—') + ' chicks' : '🥚 ' + lbl;
+}
+document.querySelectorAll('.scen').forEach(b => b.addEventListener('click', () => setScenario(b.dataset.s)));
+$('btnscen').addEventListener('click', () => $('scensheet').classList.add('open'));
+$('scensheet').addEventListener('click', e => { if (e.target.id === 'scensheet') $('scensheet').classList.remove('open'); });
+$('btndark').addEventListener('click', () => {
+  DARKMODE = !DARKMODE;
+  document.documentElement.style.setProperty('--bg', DARKMODE ? '#12140e' : '#eaf8c2');
+  document.documentElement.style.setProperty('--bg2', DARKMODE ? '#1a1d13' : '#f8f8f0');
+  document.documentElement.style.setProperty('--card', DARKMODE ? '#232619' : '#ffffff');
+  document.documentElement.style.setProperty('--ink', DARKMODE ? '#e6ecc9' : '#2a2e24');
+  document.documentElement.style.setProperty('--sub', DARKMODE ? '#8f9578' : '#6f7561');
+  document.documentElement.style.setProperty('--card-edge', DARKMODE ? '#39402c' : '#dfe7e3');
+  $('btndark').textContent = DARKMODE ? '☀️' : '🌙';
+  LOGS.log('info', (DARKMODE ? 'dark' : 'light') + ' mode');
+});
+$('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
+
+// history chart
+function renderHist() {
+  const cv = $('histcanvas'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, pad = 30;
+  ctx.fillStyle = '#14170f'; ctx.fillRect(0, 0, W, H);
+  if (HIST.floorT.length < 2) {
+    ctx.fillStyle = '#8f9578'; ctx.font = '13px system-ui';
+    ctx.fillText('collecting data… run a scenario or connect LIVE', 70, H / 2);
+    return;
+  }
+  const temps = HIST.floorT.concat(HIST.setpoint);
+  const tMin = Math.min(...temps) - 1, tMax = Math.max(...temps) + 1;
+  const x0 = pad, x1 = W - 10, y0 = H - pad, y1 = 10;
+  const X = i => x0 + (x1 - x0) * i / (HIST.max - 1);
+  const Y = t => y0 - (y0 - y1) * (t - tMin) / (tMax - tMin);
+  ctx.strokeStyle = '#2a2e20'; ctx.fillStyle = '#8f9578'; ctx.font = '10px system-ui';
+  for (let tt = Math.ceil(tMin); tt <= tMax; tt++) {
+    ctx.beginPath(); ctx.moveTo(x0, Y(tt)); ctx.lineTo(x1, Y(tt)); ctx.stroke();
+    ctx.fillText(tt + '°', 6, Y(tt) + 3);
+  }
+  for (let i = 0; i < HIST.state.length; i++) {
+    ctx.fillStyle = STATE_COLORS[HIST.state[i]] || '#555';
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(X(i), y1, (x1 - x0) / (HIST.max - 1) + 1, y0 - y1);
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#7fae55'; ctx.lineWidth = 1.5; ctx.beginPath();
+  HIST.setpoint.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  ctx.stroke();
+  ctx.strokeStyle = '#ff7b3d'; ctx.lineWidth = 2; ctx.beginPath();
+  HIST.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  ctx.stroke();
+}
+function renderLogs() {
+  $('logbody').innerHTML = LOGS.info.slice().reverse().slice(0, 60).map(e =>
+    `<div class="logline info"><span class="t">${e.t.toLocaleTimeString()}</span>${e.msg}</div>`).join('')
+    || '<div class="logline">no events yet</div>';
+}
+function renderWarn() {
+  $('warnbody').innerHTML = LOGS.warn.slice().reverse().slice(0, 60).map(e =>
+    `<div class="logline warn"><span class="t">${e.t.toLocaleTimeString()}</span>${e.msg}</div>`).join('')
+    || '<div class="logline">no warnings — all clear ✓</div>';
+}
+
+// ================= LIVE DATA (MQTT + JSON) =================
+window.setChickPositions = function(arr) {
+  arr = arr || [];
+  const cornerFormat = arr.some(p => p[0] > 50 || p[1] > 50);
+  liveDots = arr.map(p => {
+    let x = parseFloat(p[0]), z = parseFloat(p[1]);
+    if (cornerFormat) { x -= 50; z -= 50; }
+    return { x, z };
+  }).filter(p => isFinite(p.x) && isFinite(p.z));
+  liveFresh = liveDots.length > 0;
+  if (sim.forced !== 'LIVE') setScenario('LIVE');
+};
+function ingestTrackingJSON(txt) {
+  const d = JSON.parse(txt);
+  const arr = d.chicks || d.positions || d;
+  if (Array.isArray(arr) && Array.isArray(arr[0])) window.setChickPositions(arr);
+  if (isFinite(d.baseline)) sim.baseline = d.baseline;
+  if (isFinite(d.trim)) sim.trim = d.trim;
+  if (isFinite(d.day)) sim.day = d.day;
+  if (isFinite(d.floorT)) sim.floorT = d.floorT;
+  if (isFinite(d.setpoint)) sim.setpoint = d.setpoint;
+  if (isFinite(d.duty)) sim.lampPWM = d.duty / 100;
+  else if (isFinite(d.pwm)) sim.lampPWM = d.pwm / 255;
+  if (isFinite(d.nh3)) sim.nh3 = d.nh3;
+  if (typeof d.crowding === 'boolean') sim.crowdActive = d.crowding;
+  if (d.state) sim.classState = d.state;
+  updateScenActive();
+}
+setInterval(() => {
+  if (sim.forced !== 'LIVE' || window.__mqttLive) return;
+  fetch('tracking_latest.json', { cache: 'no-store' })
+    .then(r => { if (r.ok) return r.text(); throw 0; })
+    .then(ingestTrackingJSON).catch(() => {});
+}, 2000);
+
+// MQTT
+window.__mqttLive = false;
+window.connectMQTT = function(url, opts) {
+  opts = opts || {};
+  if (typeof mqtt === 'undefined') return console.warn('[mqtt] lib missing');
+  const topics = opts.topic ? [opts.topic]
+    : ['thermohuddle/telemetry/env', 'thermohuddle/telemetry', 'thermohuddle/inference/window',
+       'thermohuddle/status', 'thermohuddle/events'];
+  const client = mqtt.connect(url, opts);
+  const chip = $('connchip');
+  client.on('connect', () => {
+    topics.forEach(t => client.subscribe(t));
+    window.__mqttLive = true;
+    chip.textContent = '⚡ live'; chip.className = 'on'; chip.title = 'connected ' + url;
+  });
+  client.on('message', (t, payload) => {
+    try {
+      const d = JSON.parse(payload.toString());
+      if (t.endsWith('events')) {
+        if (d.kind === 'crowding') sim.crowdActive = d.data.active;
+        if (d.kind === 'state_change' && d.data.state) sim.classState = d.data.state;
+      } else if (t.endsWith('inference/window')) {
+        if (d.state) sim.classState = d.state;
+        if (isFinite(d.trim)) sim.trim = d.trim;
+      } else if (!t.endsWith('status')) ingestTrackingJSON(payload.toString());
+    } catch (e) { console.warn('[mqtt] bad payload'); }
+  });
+  client.on('error', () => { window.__mqttLive = false; chip.textContent = '⚡ error'; chip.className = 'err'; });
+  client.on('close', () => { window.__mqttLive = false; chip.textContent = '⚡ offline'; chip.className = ''; });
+  window.__mqttClient = client;
+  if (sim.forced !== 'LIVE') setScenario('LIVE');
+};
+$('connchip').addEventListener('click', () => {
+  if (window.__mqttClient && window.__mqttLive) {
+    window.__mqttClient.end(true);
+    window.__mqttClient = null; window.__mqttLive = false;
+    $('connchip').textContent = '⚡ offline'; $('connchip').className = '';
+    return;
+  }
+  fetch('broker.js', { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw 0; return r.text(); })
+    .then(txt => { (0, eval)(txt); const b = window.BROKER || {}; window.connectMQTT(b.url, b); })
+    .catch(() => { const host = location.hostname || 'localhost'; window.connectMQTT('ws://' + host + ':9001'); });
+});
+
+// touch orbit
+const vp = document.getElementById('viewport');
+vp.addEventListener('touchstart', e => { dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; }, { passive: true });
+vp.addEventListener('touchmove', e => {
+  if (!dragging) return;
+  camAng -= (e.touches[0].clientX - lastX) * 0.008;
+  camElev = constrain(camElev + (e.touches[0].clientY - lastY) * 0.005, 0.08, 1.35);
+  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+}, { passive: true });
+vp.addEventListener('touchend', () => dragging = false);
+vp.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  camAng -= (e.clientX - lastX) * 0.007;
+  camElev = constrain(camElev + (e.clientY - lastY) * 0.004, 0.08, 1.35);
+  lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('mouseup', () => dragging = false);
+vp.addEventListener('wheel', e => { camDist = constrain(camDist + e.delta * 0.15, 90, 420); e.preventDefault(); }, { passive: false });
+
+// SW registration
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('[sw]', err));
+  });
+}
+
+// register service worker so the app works offline + installs as PWA
+// (sw.js also caches index + libs)
+
+LOGS.log('info', 'ThermoHuddle mobile app started');
+</script>
+</body>
+</html>

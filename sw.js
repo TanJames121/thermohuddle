@@ -1,6 +1,7 @@
 /* ThermoHuddle service worker — offline app shell (v3: + mqtt.min.js) */
 const CACHE = 'thermohuddle-v3';
 const ASSETS = [
+  './index.html',
   './brooder_tracker.html',
   './p5.min.js',
   './mqtt.min.js',

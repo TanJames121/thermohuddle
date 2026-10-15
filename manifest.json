@@ -2,7 +2,7 @@
   "name": "ThermoHuddle — Brooder Tracker",
   "short_name": "ThermoHuddle",
   "description": "3D smart-brooder simulator and live chick tracker for the ThermoHuddle capstone (CpE 404).",
-  "start_url": "./brooder_tracker.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
