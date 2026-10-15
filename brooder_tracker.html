@@ -39,6 +39,46 @@
   }
   #legend b { color: #d8e1ff; }
   .sw { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align: middle; }
+  /* ===== view tabs + panels ===== */
+  #viewtabs {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 11; display: flex; gap: 6px;
+  }
+  #viewtabs button {
+    font: 11px/1 'Segoe UI', system-ui, sans-serif; color: #d8e1ff;
+    background: rgba(30, 38, 56, 0.92); border: 1px solid #3a4666;
+    border-radius: 999px; padding: 8px 14px; cursor: pointer; transition: all .15s ease;
+  }
+  #viewtabs button:hover { border-color: #ffd166; }
+  #viewtabs button.active { background: #ffd166; color: #1a1408; border-color: #ffd166; font-weight: 700; }
+  .panel {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 13; display: none; width: min(760px, 94vw); max-height: 78vh; overflow-y: auto;
+    font: 12px/1.6 'Segoe UI', system-ui, sans-serif; color: #d8e1ff;
+    background: rgba(13, 17, 23, 0.96); border: 1px solid #2a3550;
+    border-radius: 14px; padding: 16px 18px;
+  }
+  .panel.open { display: block; }
+  .panel h2 { font-size: 15px; color: #ffd166; margin: 0 0 10px; }
+  .panel .close {
+    position: absolute; top: 10px; right: 12px; cursor: pointer;
+    background: none; border: none; color: #8b98b8; font-size: 18px;
+  }
+  .panel .close:hover { color: #ff7b72; }
+  .panel canvas { width: 100%; border-radius: 8px; background: #0d1117; }
+  .logline { padding: 3px 8px; border-left: 3px solid #3a4666; margin: 4px 0;
+             background: rgba(30,38,56,0.5); border-radius: 4px; font-family: Consolas, monospace; font-size: 11px; }
+  .logline.warn { border-left-color: #ff7b72; }
+  .logline.info { border-left-color: #4ec9b0; }
+  .logline .t { color: #8b98b8; margin-right: 8px; }
+  .dashgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .statcard { background: rgba(30,38,56,0.6); border: 1px solid #2a3550; border-radius: 10px; padding: 10px 12px; }
+  .statcard .k { color: #8b98b8; font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; }
+  .statcard .v { color: #7ee787; font-size: 20px; font-weight: 700; }
+  .statcard .v.blue { color: #6cb6ff; } .statcard .v.amber { color: #ffd166; } .statcard .v.red { color: #ff7b72; }
+  .statebar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin-top: 6px; }
+  .statebar div { height: 100%; }
+  .slegend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: 10.5px; color: #8b98b8; }
   #scenarios {
     position: fixed; bottom: 14px; right: 14px; z-index: 11;
     display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
@@ -117,12 +157,53 @@
 
 <div id="legend">
   <b>Scenario simulation:</b> buttons or keys 1–7 · <b>A</b> auto ·
-  <b>L</b> live · <b>Drag</b> orbit · <b>Scroll</b> zoom · <b>S</b> saves PNG<br>
+  <b>L</b> live · <b>D</b> dark mode · <b>S</b> saves PNG<br>
   <span class="sw" style="background:#ff7b3d"></span>IR pods (940nm) ·
   <span class="sw" style="background:#4ec9b0"></span>DS18B20 ×4 ·
   <span class="sw" style="background:#c58fff"></span>DHT22 / MQ-137 ·
   <span class="sw" style="background:#ffd166"></span>ceramic lamp ·
   <span class="sw" style="background:#555"></span>chicks
+</div>
+
+<div id="viewtabs">
+  <button data-v="3d" class="active" title="3D brooder view">🥚 3D</button>
+  <button data-v="dash" title="Flock overview dashboard">📊 Dashboard</button>
+  <button data-v="hist" title="Temperature & state history chart">📈 History</button>
+  <button data-v="logs" title="History event log">🗒 Logs</button>
+  <button data-v="warn" title="Warnings & alarm log">⚠ Warnings</button>
+  <button data-v="dark" title="Toggle dark mode (key D)">🌙 Dark</button>
+</div>
+
+<div class="panel" id="panel-dash">
+  <button class="close" data-close="dash">✕</button>
+  <h2>📊 Flock Dashboard</h2>
+  <div class="dashgrid" id="dashgrid"></div>
+  <div style="margin-top:10px; color:#8b98b8; font-size:10.5px">State distribution since open:</div>
+  <div class="statebar" id="statebar"></div>
+  <div class="slegend" id="slegend"></div>
+</div>
+
+<div class="panel" id="panel-hist">
+  <button class="close" data-close="hist">✕</button>
+  <h2>📈 History — floor temp, setpoint & comfort state</h2>
+  <canvas id="histcanvas" width="720" height="300"></canvas>
+  <div class="slegend" style="margin-top:8px">
+    <span><span class="sw" style="background:#ff7b3d"></span>floor temp °C</span>
+    <span><span class="sw" style="background:#4ec9b0"></span>setpoint °C</span>
+    <span>· state bands: <span style="color:#7ee787">comfy</span> / <span style="color:#6cb6ff">cold</span> / <span style="color:#ff7b72">hot</span> / <span style="color:#b3d4ff">draft</span></span>
+  </div>
+</div>
+
+<div class="panel" id="panel-logs">
+  <button class="close" data-close="logs">✕</button>
+  <h2>🗒 History Log</h2>
+  <div id="logbody"></div>
+</div>
+
+<div class="panel" id="panel-warn">
+  <button class="close" data-close="warn">✕</button>
+  <h2>⚠ Warning Log</h2>
+  <div id="warnbody"></div>
 </div>
 <script>
 p5.disableFriendlyErrors = true;
@@ -184,6 +265,158 @@ let sim = { t: 0, mode: 'auto', forced: 'COMFY', day: 1,
 
 let camAng = -0.65, camElev = 0.42, camDist = 210;
 let dragging = false, lastX = 0, lastY = 0;
+
+// ===== HISTORY + LOGS + THEME (app features) =====
+const HIST = {
+  max: 600,                       // ring buffer samples (~10 min at 1/s)
+  floorT: [], setpoint: [], state: [], t: [],
+  push(floorT, setpoint, state) {
+    this.floorT.push(floorT); this.setpoint.push(setpoint);
+    this.state.push(state); this.t.push(Date.now());
+    if (this.floorT.length > this.max) {
+      this.floorT.shift(); this.setpoint.shift(); this.state.shift(); this.t.shift();
+    }
+  },
+};
+const LOGS = {
+  max: 200,
+  info: [], warn: [],
+  log(kind, msg) {
+    const e = { t: new Date(), msg };
+    (kind === 'warn' ? this.warn : this.info).push(e);
+    if (this.info.length > this.max) this.info.shift();
+    if (this.warn.length > this.max) this.warn.shift();
+  },
+};
+const STATE_COLORS = { COMFY: '#7ee787', COLD: '#6cb6ff', HOT: '#ff7b72', DRAFT: '#b3d4ff' };
+const DARK = {
+  on: false,
+  light: { bg: [205,207,212], amb: [160,160,175], dir1: [255,250,240], dir2: [120,130,160], hudBG: 'rgba(246,248,252,0.92)', hudText: '#1c2430', hudSub: '#55606e', statCol: '#1c2430' },
+  dark:  { bg: [16,18,26], amb: [70,75,95], dir1: [200,205,235], dir2: [40,45,70], hudBG: 'rgba(13,17,23,0.94)', hudText: '#d8e1ff', hudSub: '#8b98b8', statCol: '#7ee787' },
+  get theme() { return this.on ? this.dark : this.light; },
+  toggle() {
+    this.on = !this.on;
+    const t = this.theme;
+    document.getElementById('hud').style.background = t.hudBG;
+    document.getElementById('hud').style.color = t.hudText;
+    document.getElementById('hud').style.borderColor = this.on ? '#2a3550' : '#dfe4ea';
+    document.getElementById('hud').style.maxWidth = this.on ? '310px' : '300px';
+    document.getElementById('legend').style.background = t.hudBG;
+    document.getElementById('legend').style.color = t.hudSub;
+    document.getElementById('legend').style.borderColor = this.on ? '#2a3550' : '#dfe4ea';
+    document.getElementById('livebox').style.background = t.hudBG;
+    document.getElementById('livebox').style.color = t.hudSub;
+    document.getElementById('livebox').style.borderColor = this.on ? '#2a3550' : '#dfe4ea';
+    document.querySelectorAll('#hud .sub').forEach(el => el.style.color = t.hudSub);
+    document.querySelectorAll('#hud .stat').forEach(el => el.style.color = t.statCol);
+    LOGS.log('info', (this.on ? 'Dark' : 'Light') + ' mode enabled');
+  },
+};
+
+// view-tab wiring
+let activeView = '3d';
+function setView(v) {
+  activeView = v;
+  document.querySelectorAll('#viewtabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.v === v));
+  ['dash','hist','logs','warn'].forEach(p =>
+    document.getElementById('panel-' + p).classList.toggle('open', p === v));
+}
+document.querySelectorAll('#viewtabs button').forEach(b => {
+  b.addEventListener('click', () => {
+    if (b.dataset.v === 'dark') { DARK.toggle(); return; }
+    setView(activeView === b.dataset.v ? '3d' : b.dataset.v);
+    if (activeView === 'dash') renderDash();
+    if (activeView === 'hist') renderHist();
+    if (activeView === 'logs') renderLogs();
+    if (activeView === 'warn') renderWarn();
+  });
+});
+document.querySelectorAll('.panel .close').forEach(b =>
+  b.addEventListener('click', () => { setView('3d'); }));
+
+function renderDash() {
+  const g = document.getElementById('dashgrid');
+  const r = sim.stats || { nnd: 0, entropyN: 0, cellFrac: 0, clarkEvans: 1 };
+  const cards = [
+    ['Comfort state', STATES[sim.classState].name, ''],
+    ['Tracked chicks', String(sim.forced === 'LIVE' ? liveDots.length : chicks.length), 'blue'],
+    ['Active setpoint', sim.setpoint.toFixed(1) + '°C', 'blue'],
+    ['Floor temp', sim.floorT.toFixed(1) + '°C', ''],
+    ['Behavioral trim', (sim.trim >= 0 ? '+' : '') + sim.trim.toFixed(1) + '°C', 'amber'],
+    ['Mean NND', r.nnd.toFixed(1) + ' cm', ''],
+    ['Entropy', r.entropyN.toFixed(2), ''],
+    ['Clark–Evans R', r.clarkEvans.toFixed(2), ''],
+    ['Max cell', (r.cellFrac * 100).toFixed(0) + '%', r.cellFrac >= PLAN.crowdCellFrac ? 'red' : ''],
+    ['Crowding rule', sim.crowdActive ? 'ALARM' : (sim.crowdStreak > 0 ? 'streak ' + sim.crowdStreak : 'clear'), sim.crowdActive ? 'red' : ''],
+    ['NH₃', sim.nh3.toFixed(0) + ' ppm', sim.nh3 >= PLAN.nh3On ? 'red' : ''],
+    ['Lamp duty', Math.round(sim.lampPWM * 100) + ' %', ''],
+  ];
+  g.innerHTML = cards.map(([k, v, c]) =>
+    `<div class="statcard"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+  // state distribution bar
+  const counts = {};
+  HIST.state.forEach(s => counts[s] = (counts[s] || 0) + 1);
+  const total = HIST.state.length || 1;
+  const bar = document.getElementById('statebar');
+  bar.innerHTML = Object.entries(counts).map(([s, n]) =>
+    `<div style="width:${100*n/total}%;background:${STATE_COLORS[s] || '#555'}"></div>`).join('');
+  document.getElementById('slegend').innerHTML =
+    Object.entries(counts).map(([s, n]) =>
+      `<span><span class="sw" style="background:${STATE_COLORS[s] || '#555'}"></span>${s} ${Math.round(100*n/total)}%</span>`).join('')
+    || '<span>collecting…</span>';
+}
+
+function renderHist() {
+  const cv = document.getElementById('histcanvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, pad = 30;
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, W, H);
+  if (HIST.floorT.length < 2) {
+    ctx.fillStyle = '#8b98b8'; ctx.font = '13px system-ui';
+    ctx.fillText('collecting data… run a scenario or connect LIVE', 60, H/2);
+    return;
+  }
+  const temps = HIST.floorT.concat(HIST.setpoint);
+  const tMin = Math.min(...temps) - 1, tMax = Math.max(...temps) + 1;
+  const x0 = pad, x1 = W - 10, y0 = H - pad, y1 = 10;
+  const X = i => x0 + (x1 - x0) * i / (HIST.max - 1);
+  const Y = t => y0 - (y0 - y1) * (t - tMin) / (tMax - tMin);
+  // grid
+  ctx.strokeStyle = '#222b3d'; ctx.fillStyle = '#8b98b8'; ctx.font = '10px system-ui';
+  for (let tt = Math.ceil(tMin); tt <= tMax; tt++) {
+    ctx.beginPath(); ctx.moveTo(x0, Y(tt)); ctx.lineTo(x1, Y(tt)); ctx.stroke();
+    ctx.fillText(tt + '°', 6, Y(tt) + 3);
+  }
+  // state bands
+  for (let i = 0; i < HIST.state.length; i++) {
+    ctx.fillStyle = (STATE_COLORS[HIST.state[i]] || '#555');
+    ctx.globalAlpha = 0.13;
+    ctx.fillRect(X(i), y1, (x1 - x0) / (HIST.max - 1) + 1, y0 - y1);
+  }
+  ctx.globalAlpha = 1;
+  // setpoint line
+  ctx.strokeStyle = '#4ec9b0'; ctx.lineWidth = 1.5; ctx.beginPath();
+  HIST.setpoint.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  ctx.stroke();
+  // floor temp line
+  ctx.strokeStyle = '#ff7b3d'; ctx.lineWidth = 2; ctx.beginPath();
+  HIST.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  ctx.stroke();
+}
+
+function renderLogs() {
+  const body = document.getElementById('logbody');
+  body.innerHTML = LOGS.info.slice().reverse().map(e =>
+    `<div class="logline info"><span class="t">${e.t.toLocaleTimeString()}</span>${e.msg}</div>`).join('')
+    || '<div class="logline">no events yet — run scenarios or connect LIVE</div>';
+}
+function renderWarn() {
+  const body = document.getElementById('warnbody');
+  body.innerHTML = LOGS.warn.slice().reverse().map(e =>
+    `<div class="logline warn"><span class="t">${e.t.toLocaleTimeString()}</span>${e.msg}</div>`).join('')
+    || '<div class="logline">no warnings — all clear ✓</div>';
+}
 
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
@@ -440,6 +673,8 @@ function drawDot(x, z) {   // LIVE-mode rendering (same look as sim chicks)
 // ===== SIMULATION =====
 function updateSim() {
   sim.t++;
+  const prevClass = sim.classState;
+  const prevCrowd = sim.crowdActive;
 
   if (sim.mode === 'auto' && sim.forced !== 'LIVE') {
     const idx = floor(sim.t / CYCLE_FRAMES) % AUTO_ORDER.length;
@@ -511,6 +746,29 @@ function updateSim() {
 
   const nh3Target = sim.forced === 'AMMONIA' ? 42 : 6;
   sim.nh3 = lerp(sim.nh3, nh3Target, sim.forced === 'AMMONIA' ? 0.06 : 0.02);
+
+  // ---- history + event logging ----
+  if (sim.t % 60 === 0) HIST.push(sim.floorT, sim.setpoint, sim.classState);
+  if (sim.classState !== prevClass)
+    LOGS.log('info', `state → ${sim.classState} (floor ${sim.floorT.toFixed(1)}°C, setpoint ${sim.setpoint.toFixed(1)}°C)`);
+  if (sim.crowdActive && !prevCrowd) {
+    LOGS.log('warn', `CROWDING ALARM — max cell ${(sim.stats.cellFrac*100).toFixed(0)}%, vent burst + notification`);
+  } else if (prevCrowd && !sim.crowdActive) {
+    LOGS.log('info', 'crowding alarm cleared (sustained dispersal)');
+  }
+  if (sim.nh3 >= PLAN.nh3Crit && sim.t % 60 === 0)
+    LOGS.log('warn', `NH₃ CRITICAL ${sim.nh3.toFixed(0)} ppm — alarm + vent`);
+  else if (sim.nh3 >= PLAN.nh3On && sim.t % 120 === 0)
+    LOGS.log('warn', `NH₃ ${sim.nh3.toFixed(0)} ppm — vent ON (min-run 5 min)`);
+  if (sim.forced === 'LAMPFAIL' && sim.t % 300 === 0)
+    LOGS.log('warn', 'LAMP FAILURE — duty≈0, floor cooling');
+  // live-refresh any open panel
+  if (sim.t % 60 === 0) {
+    if (activeView === 'dash') renderDash();
+    if (activeView === 'hist') renderHist();
+    if (activeView === 'logs') renderLogs();
+    if (activeView === 'warn') renderWarn();
+  }
 }
 
 // Drive simulated chick behavior for the active scenario
@@ -640,10 +898,11 @@ function flockCentroid(pts) {
 function draw() {
   updateSim();
   updateButtons();
-  background(205, 207, 212);          // bright indoor wall, per reference photo
-  ambientLight(160, 160, 175);
-  directionalLight(255, 250, 240, -0.4, -1, -0.3);
-  directionalLight(120, 130, 160, 0.5, -0.4, 0.4);   // cool fill from window
+  const t = DARK.theme;
+  background(t.bg[0], t.bg[1], t.bg[2]);
+  ambientLight(t.amb[0], t.amb[1], t.amb[2]);
+  directionalLight(t.dir1[0], t.dir1[1], t.dir1[2], -0.4, -1, -0.3);
+  directionalLight(t.dir2[0], t.dir2[1], t.dir2[2], 0.5, -0.4, 0.4);
 
   const cy = sin(camElev) * camDist, ch = cos(camElev) * camDist;
   camera(cos(camAng) * ch, -cy, sin(camAng) * ch, 0, -35, 0, 0, 1, 0);
@@ -923,8 +1182,9 @@ function keyPressed() {
   if (k === 'A') setScenario('AUTO');
   if (k === 'L') setScenario('LIVE');
   if (k === 'N') { sim.day = (sim.day % 14) + 1; sim.trim = 0; }   // advance brooding day
+  if (k === 'D') DARK.toggle();
   const map = { '1': 'COMFY', '2': 'COLD', '3': 'HOT', '4': 'DRAFT', '5': 'CROWD', '6': 'LAMPFAIL', '7': 'AMMONIA' };
-  if (map[k]) setScenario(map[k]);
+  if (map[k]) { setScenario(map[k]); LOGS.log('info', 'scenario → ' + map[k]); }
 }
 </script>
 </body>
