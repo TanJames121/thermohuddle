@@ -100,6 +100,9 @@
     backdrop-filter: blur(4px);
   }
   #vpbtns { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; }
+  #livefeed { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
+  #viewport.feeding #livefeed { display: block; }
+  #viewport.feeding canvas#p5canvas { visibility: hidden; }
   .vpb {
     width: 34px; height: 34px; border-radius: 12px; border: 1px solid var(--card-edge);
     background: rgba(255,255,255,0.85); color: var(--ink); font-size: 15px;
@@ -155,6 +158,16 @@
   #crowdcard.show { display: block; }
   #crowdcard .ct { color: var(--red); font-weight: 800; font-size: 14px; }
   #crowdcard .cs { color: #8c1a20; font-size: 11.5px; margin-top: 3px; }
+
+  /* behavioral reasoning card ("why") */
+  #whycard {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: var(--card); border: 1px solid var(--card-edge);
+    border-radius: 14px; padding: 11px 13px; margin-top: 8px;
+  }
+  #whycard .why-ico { font-size: 17px; line-height: 1.2; }
+  #whycard .why-t { font-size: 12px; font-weight: 800; }
+  #whycard .why-b { font-size: 11px; color: var(--sub); line-height: 1.55; margin-top: 2px; }
 
   /* history chart */
   #histpage canvas { width: 100%; border-radius: 14px; background: #14170f; }
@@ -274,8 +287,10 @@
 
   <div id="viewport">
     <canvas id="p5canvas"></canvas>
+    <video id="livefeed" autoplay playsinline muted></video>
     <div id="vplabel">🥚 3D brooder</div>
     <div id="vpbtns">
+      <div class="vpb" id="btnfeed" title="Toggle dots / live feed">🎥</div>
       <div class="vpb" id="btnscen" title="Scenarios">🎛</div>
       <div class="vpb" id="btndark" title="Dark mode">🌙</div>
       <div class="vpb" id="btnsnap" title="Save PNG">📸</div>
@@ -305,6 +320,13 @@
         <div id="crowdcard">
           <div class="ct">⚠ CROWDING ALARM — acknowledge required</div>
           <div class="cs">Alarm + ventilation burst + notification sent · re-alerts every 5 min until acknowledged.</div>
+        </div>
+        <div id="whycard">
+          <div class="why-ico" id="whyico">🔎</div>
+          <div class="why-main">
+            <div class="why-t" id="whyt">—</div>
+            <div class="why-b" id="whyb">Awaiting behavior window from th-brain.</div>
+          </div>
         </div>
       </div>
 
@@ -342,9 +364,10 @@
             <div class="mcell"><div class="ml">classifier acc</div><div class="mv" id="mm-acc">—</div><div class="mg" id="mm-acc-g"></div></div>
             <div class="mcell"><div class="ml">macro F1</div><div class="mv" id="mm-f1">—</div><div class="mg" id="mm-f1-g"></div></div>
             <div class="mcell"><div class="ml">crowd recall</div><div class="mv" id="mm-recall">—</div><div class="mg" id="mm-recall-g"></div></div>
-            <div class="mcell"><div class="ml">temp MAPE</div><div class="mv" id="mm-mape">—</div><div class="mg" id="mm-mape-g"></div></div>
+            <div class="mcell"><div class="ml">resp time</div><div class="mv" id="mm-resp">—</div><div class="mg" id="mm-resp-g"></div></div>
+            <div class="mcell"><div class="ml">stabilize</div><div class="mv" id="mm-stab">—</div><div class="mg" id="mm-stab-g"></div></div>
           </div>
-          <div class="mnote" id="mnote">Awaiting model metrics from the Pi (topic <code>thermohuddle/status</code> or Supabase <code>model_accuracy</code> table).</div>
+          <div class="mnote" id="mnote">Awaiting control-loop metrics from the Pi (topic <code>thermohuddle/status</code>, payload <code>kind:"control_metrics"</code> with <code>resp_s</code> + <code>stab_s</code>). Temp auto-correction acts on live behavior — no forecast involved.</div>
         </div>
       </div>
 
@@ -427,7 +450,7 @@ function baselineForDay(day) {
 }
 
 let chicks = [], liveDots = [], liveFresh = false;
-let sim = { t: 0, mode: 'auto', forced: 'COMFY', day: 1,
+let sim = { t: 0, mode: 'manual', forced: 'LIVE', day: 1,
             baseline: 34.0, trim: 0, setpoint: 34.0, lampPWM: 0.8,
             floorT: 32.5, classState: 'COMFY', holdTimer: 0, nh3: 6,
             crowdStreak: 0, crowdActive: false, crowdAlertAt: 0, crowdGrace: 0,
@@ -454,6 +477,27 @@ const LOGS = {
     (kind === 'warn' ? this.warn : this.info).push(e);
     if (this.info.length > this.max) this.info.shift();
     if (this.warn.length > this.max) this.warn.shift();
+  },
+};
+
+// ---- control-loop timing (Chapter 4: response + stabilization) ----
+// 1 sim tick = 1 s of real control time (1 Hz controller), so tick deltas are seconds.
+const CTRL = {
+  pending: false, sawActuation: false, detT: 0, actT: 0, settle: 0,
+  reset(t) { this.pending = true; this.sawActuation = false; this.detT = t; this.settle = 0; },
+  noteActuation(t) {
+    if (this.pending && !this.sawActuation) {
+      this.sawActuation = true; this.actT = t;
+      const r = t - this.detT; this.lastResp = r; return r;
+    }
+    if (!this.pending) { this.reset(t); this.sawActuation = true; this.actT = t; }
+    return null;
+  },
+  noteSettled(t, err) {
+    if (!this.sawActuation) return null;
+    if (Math.abs(err) <= 0.5) { this.settle++; } else { this.settle = 0; }
+    if (this.settle >= 5) { this.pending = false; this.sawActuation = false; return t - this.actT; }
+    return null;
   },
 };
 
@@ -533,7 +577,7 @@ function drawChickBody(x, z, bodyCol, beakCol) {
 // ================= SIMULATION (plan-aligned) =================
 function updateSim() {
   sim.t++;
-  const prevClass = sim.classState, prevCrowd = sim.crowdActive;
+  const prevClass = sim.classState, prevCrowd = sim.crowdActive, prevTrim = sim.trim;
 
   if (sim.mode === 'auto' && sim.forced !== 'LIVE') {
     sim.forced = AUTO_ORDER[Math.floor(sim.t / CYCLE_FRAMES) % AUTO_ORDER.length];
@@ -582,8 +626,23 @@ function updateSim() {
 
   // history + logs
   if (sim.t % 60 === 0) HIST.push(sim.floorT, sim.setpoint, sim.classState);
-  if (sim.classState !== prevClass)
+  if (sim.classState !== prevClass) {
     LOGS.log('info', `state → ${sim.classState} (floor ${sim.floorT.toFixed(1)}°C, sp ${sim.setpoint.toFixed(1)}°C)`);
+    if (sim.classState !== 'COMFY') CTRL.reset(sim.t);          // behavior change = detection
+  }
+  // actuation = a trim step actually applied (or LIVE duty jump)
+  if (sim.trim !== prevTrim && sim.classState !== 'COMFY') {
+    const r = CTRL.noteActuation(sim.t);
+    if (r != null) LOGS.log('info', `actuation after ${r}s — trim ${sim.trim >= 0 ? '+' : ''}${sim.trim.toFixed(1)}°C`);
+  }
+  // stabilization = floor temp back within ±0.5 °C of setpoint, held 5 s
+  if (sim.classState !== 'COMFY') {
+    const s = CTRL.noteSettled(sim.t, sim.floorT - sim.setpoint);
+    if (s != null) {
+      LOGS.log('info', `stabilized — floor within ±0.5°C of setpoint after ${s}s`);
+      window.recordCtrlEvent && window.recordCtrlEvent({ resp_s: CTRL.lastResp, stab_s: s, state: sim.classState });
+    }
+  }
   if (sim.crowdActive && !prevCrowd)
     LOGS.log('warn', `CROWDING ALARM — max cell ${(sim.stats.cellFrac*100).toFixed(0)}% · vent burst`);
   else if (prevCrowd && !sim.crowdActive)
@@ -797,6 +856,7 @@ function updateUI() {
   else if (sim.crowdStreak > 0) { cw.className = 'chip amber'; cw.querySelector('.v').textContent = 'streak ' + sim.crowdStreak + '/' + PLAN.crowdWindows; }
   else { cw.className = 'chip'; cw.querySelector('.v').textContent = 'clear'; }
   $('crowdcard').classList.toggle('show', sim.crowdActive);
+  renderWhy();
 }
 
 // nav + pages
@@ -842,6 +902,70 @@ $('btndark').addEventListener('click', () => {
   LOGS.log('info', (DARKMODE ? 'dark' : 'light') + ' mode');
 });
 $('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
+
+// ---- view toggle: dots (3D) ↔ live camera feed ----
+// The feed is real video from the Pi camera, streamed over MQTT-WebRTC/HLS or
+// a plain MJPEG <img>/WebRTC <video> endpoint — see App notes doc, "Live feed".
+let feedOn = false;
+$('btnfeed').addEventListener('click', () => {
+  feedOn = !feedOn;
+  document.getElementById('viewport').classList.toggle('feeding', feedOn);
+  $('btnfeed').textContent = feedOn ? '🔵' : '🎥';
+  LOGS.log('info', feedOn ? 'view → live camera feed' : 'view → 3D tracking dots');
+  if (feedOn) startFeed();
+});
+function startFeed() {
+  const v = document.getElementById('livefeed');
+  // 1) WebRTC/HLS stream URL if configured in broker.js (BROKER.feed_url)
+  // 2) else local Pi camera via HTTP-FLV/MJPEG at http://<pi-ip>:8000/stream.mjpg
+  const cfg = (window.BROKER && window.BROKER.feed_url) || null;
+  const guess = cfg || (location.hostname && location.hostname !== 'localhost'
+    ? `http://${location.hostname}:8000/stream.mjpg` : null);
+  if (!guess) { LOGS.log('warn', 'no feed URL — add BROKER.feed_url or open via Pi host'); return; }
+  if (/\.mjpg|\.mjpeg/.test(guess)) {
+    // MJPEG works in <img>; use an img element layered in the viewport
+    let img = document.getElementById('feedimg');
+    if (!img) {
+      img = document.createElement('img');
+      img.id = 'feedimg';
+      img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none';
+      document.getElementById('viewport').appendChild(img);
+    }
+    img.src = guess; img.style.display = 'block'; v.style.display = 'none';
+  } else {
+    v.src = guess; v.play().catch(() => LOGS.log('warn', 'feed stream refused — check Pi stream server'));
+  }
+}
+
+// ---- behavioral reasoning ("why are they doing this") ----
+const WHY = {
+  COLD: { ico: '🥶', t: 'Clustering under the lamp — too cold',
+    b: 'Chicks huddle to share body heat and shrink exposed surface. NND low + high center occupancy. The controller is raising the setpoint.' },
+  HOT: { ico: '🥵', t: 'Spreading to the walls — too hot',
+    b: 'Chicks move apart and toward the coolest edges to shed heat; panting/wing-droop may appear. Occupancy entropy high, center empty. Setpoint is being trimmed down.' },
+  DRAFT: { ico: '💨', t: 'Avoiding one side of the floor — draft detected',
+    b: 'Chicks vacate the drafty zone and pack on the leeward side; centroid is displaced. Check for gaps in the brooder wall or fan placement.' },
+  CROWD: { ico: '⚠️', t: 'Piling in one spot — smothering risk',
+    b: 'More than 45% of the flock in a single grid cell. Piling can suffocate chicks within minutes. Alarm + ventilation burst triggered; re-checks every 5 min.' },
+  LAMPFAIL: { ico: '🔌', t: 'Cold behavior despite high setpoint — heat source suspect',
+    b: 'Floor temp is falling while the lamp duty is near 0. Behavior matches cold clumping, so the brain flags a lamp/relay fault rather than a setpoint issue.' },
+  AMMONIA: { ico: '☣️', t: 'Restless, avoiding the litter center — ammonia high',
+    b: 'Birds avoid pungent litter zones and chirp more. NH₃ above 25 ppm triggers ventilation; above 50 ppm is a welfare risk.' },
+  COMFY: { ico: '😌', t: 'Evenly spread — comfortable',
+    b: 'NND near the random-uniform expectation and balanced cell occupancy. The flock is in its thermal neutral zone; no correction needed.' },
+};
+function renderWhy() {
+  if (sim.forced === 'LIVE' && !liveDots.length) {
+    $('whyico').textContent = '🔎';
+    $('whyt').textContent = 'Awaiting first behavior window';
+    $('whyb').textContent = 'No chick positions received yet — connect MQTT/Supabase, or open 🎛 to run a scenario.';
+    return;
+  }
+  const w = WHY[sim.classState] || WHY.COMFY;
+  $('whyico').textContent = w.ico;
+  $('whyt').textContent = w.t;
+  $('whyb').textContent = w.b;
+}
 
 // history chart with range selection (24h / weekly / monthly)
 // In sim mode the ring buffer is replayed across the selected window; in LIVE
@@ -964,45 +1088,54 @@ function renderAnalytics() {
     return `<tr${d.includes(String(new Date().getDate())) ? ' class="today"' : ''}><td>${d}</td><td>${a.toFixed(1)}</td><td>${Math.min(...b.t).toFixed(1)}</td><td>${Math.max(...b.t).toFixed(1)}</td><td>${c}%</td><td>${b.alarms}</td><td>${b.nh3}</td></tr>`;
   }).join('');
   $('dtbody').innerHTML = rows;
-  renderMAPE();
+  renderCtrlLoopMetrics();
 }
 
-// MAPE — backtest the app's own naive temperature persistence forecast:
-// pred(t+1 sample) = floorT(t); MAPE = mean |err|/actual over stored history.
-// When the Pi publishes real model metrics (thermohuddle/status payload with
-// model_accuracy), ingestModelMetrics overrides these cells with true values.
-function renderMAPE() {
-  const T = HIST.floorT;
-  let mape = null;
-  if (T.length >= 3) {
-    let sum = 0, n = 0;
-    for (let i = 1; i < T.length; i++) {
-      const err = Math.abs(T[i] - T[i-1]);
-      if (T[i] !== 0) { sum += err / Math.abs(T[i]); n++; }
-    }
-    mape = n ? (sum / n) * 100 : null;
-  }
-  setMetric('mm-mape', 'mm-mape-g', mape, 'mape');
+// Control-loop performance — response time & stabilization time (Chapter 4).
+// response time = detection confirmation → actuation (trim step / duty change).
+// stabilization = actuation → floor temp back within ±0.5 °C of the new setpoint.
+// Measured from the live control log — this is a reactive loop, not a forecast,
+// so there is no prediction error to report.
+function renderCtrlLoopMetrics() {
+  const ev = window.__ctrlEvents || [];
+  const resp = ev.filter(e => e.resp_s != null).map(e => e.resp_s);
+  const stab = ev.filter(e => e.stab_s != null).map(e => e.stab_s);
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  setMetricTime('mm-resp', 'mm-resp-g', avg(resp), 60, 180, 'fast', 'ok');
+  setMetricTime('mm-stab', 'mm-stab-g', avg(stab), 300, 900, 'settled', 'slow');
+}
+function setMetricTime(vid, gid, secs, goodT, okT, goodLbl, okLbl) {
+  const v = $(vid), g = $(gid);
+  if (secs == null) { v.textContent = '—'; v.className = 'mv'; g.textContent = ''; return; }
+  v.textContent = secs < 600 ? Math.round(secs) + 's' : (secs / 60).toFixed(1) + 'm';
+  v.className = 'mv ' + (secs <= goodT ? 'good' : secs <= okT ? 'ok' : 'poor');
+  g.textContent = secs <= goodT ? '🟢 ' + goodLbl : secs <= okT ? '🟡 ' + okLbl : '🔴 user-visible lag';
 }
 function setMetric(vid, gid, val, kind) {
   const v = $(vid), g = $(gid);
   if (val == null) { v.textContent = '—'; v.className = 'mv'; g.textContent = ''; return; }
-  v.textContent = kind === 'mape' ? val.toFixed(1) + '%' : Math.round(val*100) + '%';
-  if (kind === 'mape') {
-    v.className = 'mv ' + (val < 10 ? 'good' : val < 25 ? 'ok' : 'poor');
-    g.textContent = val < 10 ? '🟢 excellent' : val < 25 ? '🟡 good' : '🔴 needs work';
-  } else {
-    v.className = 'mv ' + (val >= 0.8 ? 'good' : val >= 0.6 ? 'ok' : 'poor');
-    g.textContent = val >= 0.8 ? '🟢 strong' : val >= 0.6 ? '🟡 fair' : '🔴 weak';
-  }
+  v.textContent = Math.round(val * 100) + '%';
+  v.className = 'mv ' + (val >= 0.8 ? 'good' : val >= 0.6 ? 'ok' : 'poor');
+  g.textContent = val >= 0.8 ? '🟢 strong' : val >= 0.6 ? '🟡 fair' : '🔴 weak';
 }
-// ingestion: Pi publishes {kind:"model_metrics", data:{accuracy,f1,crowd_recall,mape}}
-window.ingestModelMetrics = function(m) {
+// ingestion: th-brain publishes {kind:"control_metrics", data:{accuracy,f1,crowd_recall,resp_s,stab_s,version}}
+window.ingestControlMetrics = function(m) {
   if (m.accuracy != null) setMetric('mm-acc', 'mm-acc-g', m.accuracy, 'acc');
   if (m.f1 != null) setMetric('mm-f1', 'mm-f1-g', m.f1, 'acc');
   if (m.crowd_recall != null) setMetric('mm-recall', 'mm-recall-g', m.crowd_recall, 'acc');
-  if (m.mape != null) setMetric('mm-mape', 'mm-mape-g', m.mape, 'mape');
-  if (m.trained_at) $('mnote').textContent = `Model trained ${new Date(m.trained_at).toLocaleString()} · v${m.version || '1'}`;
+  if (m.resp_s != null || m.stab_s != null) {
+    (window.__ctrlEvents = window.__ctrlEvents || []).push({ resp_s: m.resp_s, stab_s: m.stab_s, t: Date.now() });
+    if (window.__ctrlEvents.length > 50) window.__ctrlEvents.shift();
+    renderCtrlLoopMetrics();
+  }
+  if (m.trained_at)
+    $('mnote').textContent = `Model trained ${new Date(m.trained_at).toLocaleString()} · v${m.version || '1'} · reactive loop (no forecasting)`;
+};
+// called after each actuation to record response/stabilization pairs
+window.recordCtrlEvent = function(e) {
+  (window.__ctrlEvents = window.__ctrlEvents || []).push(e);
+  if (window.__ctrlEvents.length > 50) window.__ctrlEvents.shift();
+  renderCtrlLoopMetrics();
 };
 // CSV export of stored history
 $('csvbtn') && $('csvbtn').addEventListener('click', () => {
@@ -1084,7 +1217,7 @@ window.connectMQTT = function(url, opts) {
       if (t.endsWith('events')) {
         if (d.kind === 'crowding') sim.crowdActive = d.data.active;
         if (d.kind === 'state_change' && d.data.state) sim.classState = d.data.state;
-        if (d.kind === 'model_metrics' && window.ingestModelMetrics) window.ingestModelMetrics(d.data);
+        if (d.kind === 'control_metrics' && window.ingestControlMetrics) window.ingestControlMetrics(d.data);
       } else if (t.endsWith('inference/window')) {
         if (d.state) sim.classState = d.state;
         if (isFinite(d.trim)) sim.trim = d.trim;

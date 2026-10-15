@@ -1,5 +1,5 @@
-/* ThermoHuddle service worker — offline app shell (v3: + mqtt.min.js) */
-const CACHE = 'thermohuddle-v3';
+/* ThermoHuddle service worker — offline app shell (v4: ctrl metrics + feed toggle) */
+const CACHE = 'thermohuddle-v4';
 const ASSETS = [
   './index.html',
   './brooder_tracker.html',
