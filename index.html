@@ -185,6 +185,46 @@
   .navbtn.active .ic { transform: scale(1.08); }
 
   /* scenario sheet (secondary, slides over) */
+  /* history range bar */
+  .rangebar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .rangebar .rb {
+    flex: 1; padding: 7px 0; border-radius: 999px; font-size: 11px; font-weight: 700;
+    background: var(--card); border: 1px solid var(--card-edge); color: var(--sub);
+    cursor: pointer;
+  }
+  .rangebar .rb.on { background: var(--green-soft); border-color: var(--green); color: #3c5a1e; }
+  .histsum { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .hchip {
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 10px;
+    padding: 6px 10px; font-size: 11px; color: var(--sub);
+  }
+  .hchip b { color: var(--ink); }
+  /* analytics */
+  .card-lite {
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 14px;
+    padding: 12px 14px; margin-top: 8px;
+  }
+  .card-lite .cl-t {
+    font-size: 12px; font-weight: 800; letter-spacing: .4px; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .card-lite .cl-s { font-size: 9.5px; font-weight: 400; color: var(--sub); }
+  .dtable { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .dtable th { color: var(--sub); font-weight: 600; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--card-edge); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+  .dtable td { padding: 7px 8px; border-bottom: 1px solid rgba(190,200,170,.35); }
+  .dtable tr.today td { background: var(--green-soft); }
+  .csvbtn {
+    background: var(--green-soft); border: 1px solid var(--green); color: #3c5a1e;
+    border-radius: 999px; font-size: 10px; font-weight: 700; padding: 4px 10px; cursor: pointer;
+  }
+  .mgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .mcell { background: var(--bg2); border: 1px solid var(--card-edge); border-radius: 10px; padding: 9px 6px; text-align: center; }
+  .mcell .ml { font-size: 8.8px; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; }
+  .mcell .mv { font-size: 17px; font-weight: 800; margin-top: 2px; }
+  .mcell .mg { font-size: 8.5px; margin-top: 1px; color: var(--sub); }
+  .mv.good { color: #3c5a1e; } .mv.ok { color: var(--amber); } .mv.poor { color: var(--red); }
+  .mnote { font-size: 10.5px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+  .mnote code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 4px; font-size: 10px; }
   #scensheet {
     position: absolute; inset: 0; z-index: 30; display: none;
     background: rgba(42,46,36,0.35); backdrop-filter: blur(3px);
@@ -269,7 +309,43 @@
       </div>
 
       <div class="page" id="page-hist">
+        <div class="rangebar" id="rangebar">
+          <button class="rb on" data-r="24h">24 hours</button>
+          <button class="rb" data-r="7d">Weekly</button>
+          <button class="rb" data-r="30d">Monthly</button>
+        </div>
         <canvas id="histcanvas" width="720" height="260"></canvas>
+        <div class="histsum" id="histsum"></div>
+      </div>
+
+      <div class="page" id="page-analytics">
+        <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat"><div class="v" id="an-avg">—</div><div class="k">avg floor °C</div></div>
+          <div class="stat"><div class="v" id="an-min">—</div><div class="k">min °C</div></div>
+          <div class="stat"><div class="v" id="an-max">—</div><div class="k">max °C</div></div>
+          <div class="stat"><div class="v" id="an-comfy">—</div><div class="k">% in comfy</div></div>
+          <div class="stat"><div class="v" id="an-trims">—</div><div class="k">trim steps</div></div>
+          <div class="stat"><div class="v" id="an-alarms">—</div><div class="k">crowd alarms</div></div>
+          <div class="stat"><div class="v" id="an-nh3">—</div><div class="k">nh₃ events</div></div>
+          <div class="stat"><div class="v" id="an-uptime">—</div><div class="k">samples</div></div>
+        </div>
+        <div class="card-lite">
+          <div class="cl-t">Daily rollup <button class="csvbtn" id="csvbtn">⬇ CSV</button></div>
+          <div style="overflow-x:auto"><table class="dtable" id="dtable">
+            <thead><tr><th>Day</th><th>Avg °C</th><th>Min</th><th>Max</th><th>Comfy %</th><th>Alarms</th><th>NH₃</th></tr></thead>
+            <tbody id="dtbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card-lite">
+          <div class="cl-t">Model accuracy <span class="cl-s">from th-brain · via MQTT/Supabase</span></div>
+          <div class="mgrid">
+            <div class="mcell"><div class="ml">classifier acc</div><div class="mv" id="mm-acc">—</div><div class="mg" id="mm-acc-g"></div></div>
+            <div class="mcell"><div class="ml">macro F1</div><div class="mv" id="mm-f1">—</div><div class="mg" id="mm-f1-g"></div></div>
+            <div class="mcell"><div class="ml">crowd recall</div><div class="mv" id="mm-recall">—</div><div class="mg" id="mm-recall-g"></div></div>
+            <div class="mcell"><div class="ml">temp MAPE</div><div class="mv" id="mm-mape">—</div><div class="mg" id="mm-mape-g"></div></div>
+          </div>
+          <div class="mnote" id="mnote">Awaiting model metrics from the Pi (topic <code>thermohuddle/status</code> or Supabase <code>model_accuracy</code> table).</div>
+        </div>
       </div>
 
       <div class="page" id="page-logs">
@@ -285,6 +361,7 @@
     <div id="nav">
       <div class="navbtn active" data-p="stats"><span class="ic">📊</span><span class="lb">Stats</span></div>
       <div class="navbtn" data-p="hist"><span class="ic">📈</span><span class="lb">History</span></div>
+      <div class="navbtn" data-p="analytics"><span class="ic">🔬</span><span class="lb">Analytics</span></div>
       <div class="navbtn" data-p="logs"><span class="ic">🗒</span><span class="lb">Logs</span></div>
       <div class="navbtn" data-p="warn"><span class="ic">⚠️</span><span class="lb">Warnings</span></div>
     </div>
@@ -361,10 +438,13 @@ let dragging = false, lastX = 0, lastY = 0;
 
 // history + logs
 const HIST = {
-  max: 600, floorT: [], setpoint: [], state: [],
+  max: 600, floorT: [], setpoint: [], state: [], t: [],
   push(a, b, c) {
     this.floorT.push(a); this.setpoint.push(b); this.state.push(c);
-    if (this.floorT.length > this.max) { this.floorT.shift(); this.setpoint.shift(); this.state.shift(); }
+    this.t.push(Date.now());
+    if (this.floorT.length > this.max) {
+      this.floorT.shift(); this.setpoint.shift(); this.state.shift(); this.t.shift();
+    }
   },
 };
 const LOGS = {
@@ -514,6 +594,16 @@ function updateSim() {
     LOGS.log('warn', `NH₃ ${sim.nh3.toFixed(0)} ppm — vent ON`);
   if (sim.forced === 'LAMPFAIL' && sim.t % 300 === 0)
     LOGS.log('warn', 'LAMP FAILURE — duty≈0, floor cooling');
+  // live-refresh the open page
+  if (sim.t % 120 === 0) {
+    const open = document.querySelector('.navbtn.active');
+    if (open) {
+      if (open.dataset.p === 'hist') renderHist();
+      else if (open.dataset.p === 'analytics') renderAnalytics();
+      else if (open.dataset.p === 'logs') renderLogs();
+      else if (open.dataset.p === 'warn') renderWarn();
+    }
+  }
 }
 
 function applyBehavior(mode) {
@@ -714,6 +804,7 @@ document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', ()
   document.querySelectorAll('.navbtn').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + b.dataset.p));
   if (b.dataset.p === 'hist') renderHist();
+  if (b.dataset.p === 'analytics') renderAnalytics();
   if (b.dataset.p === 'logs') renderLogs();
   if (b.dataset.p === 'warn') renderWarn();
 }));
@@ -752,39 +843,180 @@ $('btndark').addEventListener('click', () => {
 });
 $('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
 
-// history chart
+// history chart with range selection (24h / weekly / monthly)
+// In sim mode the ring buffer is replayed across the selected window; in LIVE
+// mode with a Supabase history source this fetches real stored rows instead.
+let histRange = '24h';
+const RANGE_MS = { '24h': 24*3600e3, '7d': 7*24*3600e3, '30d': 30*24*3600e3 };
+document.querySelectorAll('.rangebar .rb').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.rangebar .rb').forEach(x => x.classList.toggle('on', x === b));
+  histRange = b.dataset.r;
+  renderHist();
+}));
+
+function histSeries() {
+  // sim: stretch the ring buffer over the window; live: real timestamps when
+  // the Pi syncs (ts array kept alongside samples)
+  const n = HIST.floorT.length;
+  if (!n) return { labels: [], floorT: [], setpoint: [], states: [] };
+  const span = RANGE_MS[histRange];
+  const labelFmt = histRange === '24h' ? (i) => {
+    const mins = Math.round(i / Math.max(1, n - 1) * 24 * 60);
+    return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;
+  } : (i) => {
+    const days = Math.round(i / Math.max(1, n - 1) * (histRange === '7d' ? 7 : 30));
+    return days === 0 ? 'now' : `-${days}d`;
+  };
+  return {
+    labels: HIST.floorT.map((_, i) => labelFmt(i)),
+    floorT: HIST.floorT.slice(),
+    setpoint: HIST.setpoint.slice(),
+    states: HIST.state.slice(),
+  };
+}
+
 function renderHist() {
   const cv = $('histcanvas'), ctx = cv.getContext('2d');
   const W = cv.width, H = cv.height, pad = 30;
   ctx.fillStyle = '#14170f'; ctx.fillRect(0, 0, W, H);
-  if (HIST.floorT.length < 2) {
+  const s = histSeries();
+  if (s.floorT.length < 2) {
     ctx.fillStyle = '#8f9578'; ctx.font = '13px system-ui';
     ctx.fillText('collecting data… run a scenario or connect LIVE', 70, H / 2);
+    $('histsum').innerHTML = '';
     return;
   }
-  const temps = HIST.floorT.concat(HIST.setpoint);
+  const temps = s.floorT.concat(s.setpoint);
   const tMin = Math.min(...temps) - 1, tMax = Math.max(...temps) + 1;
   const x0 = pad, x1 = W - 10, y0 = H - pad, y1 = 10;
-  const X = i => x0 + (x1 - x0) * i / (HIST.max - 1);
+  const N = s.floorT.length;
+  const X = i => x0 + (x1 - x0) * i / (N - 1);
   const Y = t => y0 - (y0 - y1) * (t - tMin) / (tMax - tMin);
   ctx.strokeStyle = '#2a2e20'; ctx.fillStyle = '#8f9578'; ctx.font = '10px system-ui';
   for (let tt = Math.ceil(tMin); tt <= tMax; tt++) {
     ctx.beginPath(); ctx.moveTo(x0, Y(tt)); ctx.lineTo(x1, Y(tt)); ctx.stroke();
     ctx.fillText(tt + '°', 6, Y(tt) + 3);
   }
-  for (let i = 0; i < HIST.state.length; i++) {
-    ctx.fillStyle = STATE_COLORS[HIST.state[i]] || '#555';
+  // x labels (sparse)
+  const every = Math.max(1, Math.floor(N / 8));
+  for (let i = 0; i < N; i += every) {
+    ctx.fillText(s.labels[i], X(i) - 12, H - 10);
+  }
+  for (let i = 0; i < N; i++) {
+    ctx.fillStyle = STATE_COLORS[s.states[i]] || '#555';
     ctx.globalAlpha = 0.15;
-    ctx.fillRect(X(i), y1, (x1 - x0) / (HIST.max - 1) + 1, y0 - y1);
+    ctx.fillRect(X(i), y1, (x1 - x0) / (N - 1) + 1, y0 - y1);
   }
   ctx.globalAlpha = 1;
   ctx.strokeStyle = '#7fae55'; ctx.lineWidth = 1.5; ctx.beginPath();
-  HIST.setpoint.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  s.setpoint.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
   ctx.stroke();
   ctx.strokeStyle = '#ff7b3d'; ctx.lineWidth = 2; ctx.beginPath();
-  HIST.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  s.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
   ctx.stroke();
+  // summary chips
+  const avg = s.floorT.reduce((a, b) => a + b, 0) / N;
+  const comfy = s.states.filter(x => x === 'COMFY').length / N;
+  $('histsum').innerHTML =
+    `<span class="hchip">range <b>${histRange === '24h' ? '24 hours' : histRange === '7d' ? '7 days' : '30 days'}</b></span>` +
+    `<span class="hchip">avg <b>${avg.toFixed(1)}°C</b></span>` +
+    `<span class="hchip">min <b>${Math.min(...s.floorT).toFixed(1)}°</b> · max <b>${Math.max(...s.floorT).toFixed(1)}°</b></span>` +
+    `<span class="hchip">comfy <b>${Math.round(comfy*100)}%</b></span>`;
 }
+
+// ================= ANALYTICS =================
+function countEvents(kind) {
+  const src = kind === 'warn' ? LOGS.warn : LOGS.info;
+  return src.filter(e =>
+    kind === 'alarms' ? e.msg.includes('CROWDING') :
+    kind === 'nh3' ? e.msg.includes('NH₃') :
+    e.msg.includes('state →')).length;
+}
+
+function renderAnalytics() {
+  const T = HIST.floorT, S = HIST.state;
+  if (!T.length) { $('dtbody').innerHTML = '<tr><td colspan="7" style="color:var(--sub)">collecting…</td></tr>'; return; }
+  const avg = T.reduce((a,b)=>a+b,0)/T.length;
+  $('an-avg').textContent = avg.toFixed(1);
+  $('an-min').textContent = Math.min(...T).toFixed(1);
+  $('an-max').textContent = Math.max(...T).toFixed(1);
+  $('an-comfy').textContent = Math.round(S.filter(x=>x==='COMFY').length/S.length*100) + '%';
+  $('an-trims').textContent = countEvents('trims');
+  $('an-alarms').textContent = countEvents('alarms');
+  $('an-nh3').textContent = countEvents('nh3');
+  $('an-uptime').textContent = T.length;
+  // daily rollup — bucket samples into pseudo-days (sim) / real days (live ts)
+  const days = {};
+  const ts = HIST.t || [];
+  T.forEach((t, i) => {
+    const d = ts.length ? new Date(ts[i]).toLocaleDateString('en-PH', {month:'short', day:'numeric'})
+                        : (i < T.length/2 ? 'today' : 'prev day');
+    (days[d] = days[d] || { t: [], s: [], alarms: 0, nh3: 0 });
+    days[d].t.push(t); days[d].s.push(S[i]);
+  });
+  LOGS.warn.forEach(e => {
+    const d = e.t.toLocaleDateString('en-PH', {month:'short', day:'numeric'});
+    if (days[d]) { if (e.msg.includes('CROWDING')) days[d].alarms++; if (e.msg.includes('NH₃')) days[d].nh3++; }
+  });
+  const rows = Object.entries(days).slice(-8).map(([d, b]) => {
+    const a = b.t.reduce((x,y)=>x+y,0)/b.t.length;
+    const c = Math.round(b.s.filter(x=>x==='COMFY').length/b.s.length*100);
+    return `<tr${d.includes(String(new Date().getDate())) ? ' class="today"' : ''}><td>${d}</td><td>${a.toFixed(1)}</td><td>${Math.min(...b.t).toFixed(1)}</td><td>${Math.max(...b.t).toFixed(1)}</td><td>${c}%</td><td>${b.alarms}</td><td>${b.nh3}</td></tr>`;
+  }).join('');
+  $('dtbody').innerHTML = rows;
+  renderMAPE();
+}
+
+// MAPE — backtest the app's own naive temperature persistence forecast:
+// pred(t+1 sample) = floorT(t); MAPE = mean |err|/actual over stored history.
+// When the Pi publishes real model metrics (thermohuddle/status payload with
+// model_accuracy), ingestModelMetrics overrides these cells with true values.
+function renderMAPE() {
+  const T = HIST.floorT;
+  let mape = null;
+  if (T.length >= 3) {
+    let sum = 0, n = 0;
+    for (let i = 1; i < T.length; i++) {
+      const err = Math.abs(T[i] - T[i-1]);
+      if (T[i] !== 0) { sum += err / Math.abs(T[i]); n++; }
+    }
+    mape = n ? (sum / n) * 100 : null;
+  }
+  setMetric('mm-mape', 'mm-mape-g', mape, 'mape');
+}
+function setMetric(vid, gid, val, kind) {
+  const v = $(vid), g = $(gid);
+  if (val == null) { v.textContent = '—'; v.className = 'mv'; g.textContent = ''; return; }
+  v.textContent = kind === 'mape' ? val.toFixed(1) + '%' : Math.round(val*100) + '%';
+  if (kind === 'mape') {
+    v.className = 'mv ' + (val < 10 ? 'good' : val < 25 ? 'ok' : 'poor');
+    g.textContent = val < 10 ? '🟢 excellent' : val < 25 ? '🟡 good' : '🔴 needs work';
+  } else {
+    v.className = 'mv ' + (val >= 0.8 ? 'good' : val >= 0.6 ? 'ok' : 'poor');
+    g.textContent = val >= 0.8 ? '🟢 strong' : val >= 0.6 ? '🟡 fair' : '🔴 weak';
+  }
+}
+// ingestion: Pi publishes {kind:"model_metrics", data:{accuracy,f1,crowd_recall,mape}}
+window.ingestModelMetrics = function(m) {
+  if (m.accuracy != null) setMetric('mm-acc', 'mm-acc-g', m.accuracy, 'acc');
+  if (m.f1 != null) setMetric('mm-f1', 'mm-f1-g', m.f1, 'acc');
+  if (m.crowd_recall != null) setMetric('mm-recall', 'mm-recall-g', m.crowd_recall, 'acc');
+  if (m.mape != null) setMetric('mm-mape', 'mm-mape-g', m.mape, 'mape');
+  if (m.trained_at) $('mnote').textContent = `Model trained ${new Date(m.trained_at).toLocaleString()} · v${m.version || '1'}`;
+};
+// CSV export of stored history
+$('csvbtn') && $('csvbtn').addEventListener('click', () => {
+  const rows = [['t', 'floorT', 'setpoint', 'state']];
+  HIST.floorT.forEach((t, i) => rows.push([
+    (HIST.t[i] ? new Date(HIST.t[i]).toISOString() : i), t, HIST.setpoint[i], HIST.state[i]
+  ]));
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type: 'text/csv'})),
+    download: `thermohuddle_history_${new Date().toISOString().split('T')[0]}.csv`,
+  });
+  document.body.appendChild(a); a.click(); a.remove();
+});
 function renderLogs() {
   $('logbody').innerHTML = LOGS.info.slice().reverse().slice(0, 60).map(e =>
     `<div class="logline info"><span class="t">${e.t.toLocaleTimeString()}</span>${e.msg}</div>`).join('')
@@ -852,6 +1084,7 @@ window.connectMQTT = function(url, opts) {
       if (t.endsWith('events')) {
         if (d.kind === 'crowding') sim.crowdActive = d.data.active;
         if (d.kind === 'state_change' && d.data.state) sim.classState = d.data.state;
+        if (d.kind === 'model_metrics' && window.ingestModelMetrics) window.ingestModelMetrics(d.data);
       } else if (t.endsWith('inference/window')) {
         if (d.state) sim.classState = d.state;
         if (isFinite(d.trim)) sim.trim = d.trim;
