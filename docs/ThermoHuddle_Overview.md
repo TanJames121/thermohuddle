@@ -141,7 +141,7 @@ The Pi publishes `{kind:"control_metrics", data:{resp_s, stab_s, accuracy, f1, c
 ### 4.5 Live feed vs tracking dots (🎥 button)
 
 - **3D tracking dots** — the analysis view: every chick = a marker at its detected (x, z). This is what the algorithm sees; best for verifying tracking quality.
-- **Live camera feed** — real frames from the NoIR cam for eyeballing the brooder. **The AI never uses video**: th-visiond grabs a frame every 1–2 s (a picture, not a stream), detects, publishes positions. The human feed is a separate transport — recommended: snapshot loop to Supabase Storage (works from anywhere over HTTPS; see Build Guide §3 for the bucket setup).
+- **Live camera feed** — real frames from the NoIR cam for eyeballing the brooder. **The AI never uses video**: th-visiond grabs a frame every 1–2 s (a picture, not a stream), detects, publishes positions. The human feed is a separate transport — the app **polls `live.jpg` from Supabase Storage every 15 s** (configurable via `feed_poll_s`), **only while the feed view is open and the tab is visible** (works from anywhere over HTTPS; bucket setup in Build Guide §3.5).
 
 ### 4.6 Frame capture & storage (how the space-saving works)
 
@@ -156,7 +156,7 @@ The camera captures **every 60 s** for analysis — but **only event frames are 
 - **Archive triggers:** a state transition (→COLD/HOT/DRAFT/CROWDING/LAMPFAIL/NH₃) saves the **before** frame; the recovery transition saves the **after** frame. Each `control_events` row stores both URLs (`img_before`/`img_after`).
 - **Why not keep all frames?** 1,440 pics/day ≈ 84 MB/day → the 1 GB free tier dies in ~12 days. Event-based ≈ 141 MB/month, fits free.
 - These before/after pairs are exactly the Chapter 4 evidence images: *clustering (cold) → trim applied → evenly spread (recovered)*.
-- Bandwidth: the feed polls `live.jpg` every 2–5 s while watched ≈ 105 MB/hr per viewer — free egress ≈ 47 viewer-hours/month. Monitor, don't 24/7-stream.
+- Bandwidth: while the feed view is open and the tab visible, the app polls `live.jpg` **every 15 s** (configurable: `feed_poll_s` in `broker.js`) ≈ **14 MB/hr per viewer** — free egress ≈ **340 viewer-hours/month**. No polling happens with the feed closed or the tab backgrounded. Monitor, don't 24/7-stream.
 
 ### 4.7 Scenarios (demo/debug only)
 

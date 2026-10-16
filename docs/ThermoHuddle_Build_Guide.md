@@ -156,7 +156,7 @@ create policy "anon read" on telemetry_raw for select to anon using (true);
 ### 3.5 Storage bucket (live feed + event frames)
 
 Create a **public bucket** named `frames`:
-- `frames/live.jpg` — overwritten every 60 s capture (the live feed, ~60 KB, never grows)
+- `frames/live.jpg` — overwritten every 60 s capture (the live feed, ~60 KB, never grows). The app polls it every **15 s** while someone is watching (configurable `feed_poll_s`).
 - `frames/events/<ts>_<state>.jpg` — before/after event pairs (~141 MB/month)
 - th-visiond uploads `live.jpg` every capture; th-brain saves event frames on state transitions + recovery (URLs go into `control_events.img_before/img_after`)
 

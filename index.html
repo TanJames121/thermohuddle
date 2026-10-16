@@ -904,37 +904,62 @@ $('btndark').addEventListener('click', () => {
 $('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
 
 // ---- view toggle: dots (3D) ↔ live camera feed ----
-// The feed is real video from the Pi camera, streamed over MQTT-WebRTC/HLS or
-// a plain MJPEG <img>/WebRTC <video> endpoint — see App notes doc, "Live feed".
-let feedOn = false;
+// Modes (auto-detected from BROKER.feed_url):
+//  · snapshot .jpg/.png → POLL every 15 s (BROKER.feed_poll_s) — recommended.
+//    Polls ONLY while the feed view is open AND the tab is visible
+//    (~14 MB/hr per viewer; Supabase free egress ≈ 340 viewer-hours/mo).
+//  · .mjpg stream → continuous <img> (same-Wi-Fi only behind plain HTTP)
+//  · other URL → <video> (WebRTC/HLS via go2rtc/MediaMTX)
+let feedOn = false, feedTimer = null;
+function ensureFeedImg() {
+  let img = document.getElementById('feedimg');
+  if (!img) {
+    img = document.createElement('img');
+    img.id = 'feedimg';
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none';
+    document.getElementById('viewport').appendChild(img);
+  }
+  return img;
+}
 $('btnfeed').addEventListener('click', () => {
   feedOn = !feedOn;
   document.getElementById('viewport').classList.toggle('feeding', feedOn);
   $('btnfeed').textContent = feedOn ? '🔵' : '🎥';
   LOGS.log('info', feedOn ? 'view → live camera feed' : 'view → 3D tracking dots');
-  if (feedOn) startFeed();
+  if (feedOn) startFeed(); else stopFeed();
 });
 function startFeed() {
   const v = document.getElementById('livefeed');
-  // 1) WebRTC/HLS stream URL if configured in broker.js (BROKER.feed_url)
-  // 2) else local Pi camera via HTTP-FLV/MJPEG at http://<pi-ip>:8000/stream.mjpg
   const cfg = (window.BROKER && window.BROKER.feed_url) || null;
   const guess = cfg || (location.hostname && location.hostname !== 'localhost'
     ? `http://${location.hostname}:8000/stream.mjpg` : null);
   if (!guess) { LOGS.log('warn', 'no feed URL — add BROKER.feed_url or open via Pi host'); return; }
-  if (/\.mjpg|\.mjpeg/.test(guess)) {
-    // MJPEG works in <img>; use an img element layered in the viewport
-    let img = document.getElementById('feedimg');
-    if (!img) {
-      img = document.createElement('img');
-      img.id = 'feedimg';
-      img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none';
-      document.getElementById('viewport').appendChild(img);
-    }
+  if (/\.(jpe?g|png)($|\?)/i.test(guess) && !/\.mjpe?g/i.test(guess)) {
+    // SNAPSHOT POLL — refresh only while someone is actually watching
+    const img = ensureFeedImg();
+    const pollS = (window.BROKER && +window.BROKER.feed_poll_s) || 15;
+    const refresh = () => {
+      if (document.hidden) return;                 // tab in background → skip
+      img.src = guess + (guess.includes('?') ? '&' : '?') + 't=' + Date.now();
+    };
+    refresh();
+    feedTimer = setInterval(refresh, pollS * 1000);
+    img.style.display = 'block'; v.style.display = 'none';
+    LOGS.log('info', `feed → snapshot poll every ${pollS}s (only while watching)`);
+  } else if (/\.mjpe?g/i.test(guess)) {
+    const img = ensureFeedImg();
     img.src = guess; img.style.display = 'block'; v.style.display = 'none';
   } else {
+    v.style.display = 'block';
     v.src = guess; v.play().catch(() => LOGS.log('warn', 'feed stream refused — check Pi stream server'));
   }
+}
+function stopFeed() {
+  if (feedTimer) { clearInterval(feedTimer); feedTimer = null; }
+  const v = document.getElementById('livefeed');
+  const img = document.getElementById('feedimg');
+  if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
+  if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
 }
 
 // ---- behavioral reasoning ("why are they doing this") ----

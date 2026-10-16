@@ -14,4 +14,10 @@ window.BROKER = {
 
   // Topic the Pi pipeline publishes telemetry on (must match thermohuddle_draft.py)
   topic: "thermohuddle/telemetry",
+
+  // Live camera feed (optional). RECOMMENDED: Supabase Storage snapshot —
+  // the app polls this every feed_poll_s ONLY while the feed view is open
+  // and the tab is visible (~14 MB/hr per viewer).
+  // feed_url: "https://<project>.supabase.co/storage/v1/object/public/frames/live.jpg",
+  // feed_poll_s: 15,   // seconds between feed refreshes (default 15)
 };

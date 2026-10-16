@@ -1,5 +1,5 @@
-/* ThermoHuddle service worker — offline app shell (v5: ambient-limit reasoning) */
-const CACHE = 'thermohuddle-v5';
+/* ThermoHuddle service worker — offline app shell (v6: 15s snapshot poll feed) */
+const CACHE = 'thermohuddle-v6';
 const ASSETS = [
   './index.html',
   './p5.min.js',
