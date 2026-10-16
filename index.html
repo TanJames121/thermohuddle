@@ -961,7 +961,12 @@ function renderWhy() {
     $('whyb').textContent = 'No chick positions received yet — connect MQTT/Supabase, or open 🎛 to run a scenario.';
     return;
   }
-  const w = WHY[sim.classState] || WHY.COMFY;
+  let w = WHY[sim.classState] || WHY.COMFY;
+  // physical limit: HOT with the lamp already off → ambient itself is too warm
+  if (sim.classState === 'HOT' && sim.lampPWM <= 0.05 && sim.floorT > sim.setpoint + 0.5) {
+    w = { ico: '🌡️', t: 'Still hot with lamp at 0% — ambient limit',
+      b: 'The loop removed the lamp\'s heat but the brooder tracks outside air — trim cannot cool below ambient. Fans give convective relief only. Farmer actions: wet-sack evaporative cooling on the fan intake, shade the brooder, brood cooler hours.' };
+  }
   $('whyico').textContent = w.ico;
   $('whyt').textContent = w.t;
   $('whyb').textContent = w.b;

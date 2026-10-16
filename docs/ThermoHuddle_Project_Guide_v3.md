@@ -109,8 +109,24 @@ The dashboard shows a card answering *why are they doing this*:
 - **LAMPFAIL:** cold-type clustering despite high setpoint + duty ≈ 0 → heat source fault, not setpoint issue.
 - **AMMONIA:** birds avoid the litter center, restlessness/chirping up; NH₃ thresholds drive the fan.
 - **COMFY:** NND ≈ CSR expectation, cells balanced, no actuation.
+- **STILL HOT @ LAMP 0 % (ambient limit):** if HOT persists with duty at 0, the brooder is tracking outside air — **the trim cannot cool below ambient.** Fans give convective/panting relief only. The app raises a farmer-action warning: wet-sack evaporative cooling on the fan intake (standard PH practice, −2–4 °C on incoming air), shade the brooder, brood cooler hours.
 
 These are **interpretations of the pattern, not predictions** — the AI reads behavior, the human reads the why.
+
+### 3.2b Frame capture & storage strategy (saves Supabase space)
+
+The camera captures **every 60 s** for analysis — but **only event frames are archived**:
+
+| What | Where | Size |
+|---|---|---|
+| **Live feed** | `frames/live.jpg` — ONE file, overwritten every capture | ~60 KB total, never grows |
+| **Event archive** | `frames/events/<ts>_<state>.jpg` — captured on state change + one **after stabilization** | ~5 MB/day @ 40 events → ~141 MB/month, 30-day retention |
+
+- Every 60 s frame → detect → publish positions → **overwrite `live.jpg`** → done. No history by default.
+- **Archive triggers:** state transition (→COLD/HOT/DRAFT/CROWDING/LAMPFAIL/NH₃) saves the **before** frame; the recovery transition saves the **after** frame. Each actuation row in `control_events` stores both URLs.
+- **Why not keep all frames?** 1,440 pics/day ≈ 84 MB/day → the 1 GB free tier dies in ~12 days. Event-based = ~141 MB/month, fits free.
+- Those before/after pairs are exactly the Chapter 4 evidence images: *clustering (cold) → trim applied → evenly spread (recovered)*.
+- Bandwidth note: the feed polls `live.jpg` every 2–5 s while someone is watching ≈ 105 MB/hour per viewer — free egress covers ~47 viewer-hours/month. Monitor, don't 24/7-stream.
 
 ### 3.3 Pages
 
@@ -179,9 +195,10 @@ The trained AI **must have raw data** and draw its own conclusions — so the sc
 Same columns as raw but aggregated (mean NND, entropy, cell fracs, chirp rate, state, trim applied, resp/stab times, alarm flags).
 
 ### `control_events` — every actuation, one row each
-`ts`, `state`, `trim_before/after`, `duty_before/after`, `resp_s`, `stab_s`, `outcome` — written by uplink from th-brain events.
+`ts`, `state`, `trim_before/after`, `duty_before/after`, `resp_s`, `stab_s`, `outcome`, `img_before`, `img_after` — written by uplink from th-brain events.
 - **resp_s** = detection→actuation delay
 - **stab_s** = actuation→temp within ±0.5 °C of setpoint for 5 s
+- **img_before / img_after** = Supabase Storage URLs of the event's before/after frames (evidence pair for Chapter 4)
 
 ### `model_accuracy` — per-version metrics (Pi publishes, app reads)
 `version`, `trained_at`, `accuracy`, `f1_macro`, `crowd_recall`, `resp_s`, `stab_s`, `confusion_matrix` (jsonb), `n_windows`
@@ -212,8 +229,9 @@ create policy "anon read" on telemetry_raw for select to anon using (true);
 `gpllypfnxjjkzzmaxtub.supabase.co` no longer resolves (free-tier pause/deletion). Restore:
 1. supabase.com dashboard → **Restore** (if paused) or create a new project
 2. Run the schema SQL from this section in the SQL editor
-3. Update `SB`/`KEY` constants in the app if the project URL changed
-4. The app reads tables at runtime — no rebuild needed.
+3. Create a public **Storage bucket** named `frames` (paths: `live.jpg`, `events/<ts>_<state>.jpg`) for the feed + event archive
+4. Update `SB`/`KEY` constants in the app if the project URL changed
+5. The app reads tables at runtime — no rebuild needed.
 
 ---
 
