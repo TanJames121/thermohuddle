@@ -81,7 +81,14 @@ class Config:
     centroid_draft: float = 15.0
     center_radius: float = 20.0
     center_occ_hot: float = 0.06
-    cold_floor: float = 31.5
+    cold_floor: float = 31.5          # DEPRECATED absolute check (day-1 only) — use cold_tol_c
+    # --- cross-modal fusion (behavior × thermal agreement → confidence) ---
+    hot_tol_c: float = 3.0            # [A] floor ≥ baseline + tol ⇒ thermal says HOT
+    cold_tol_c: float = 3.0           # [A] floor ≤ baseline − tol ⇒ thermal says COLD
+    conf_trim_min: float = 0.60       # [A] min fused confidence to apply a trim
+    conf_cap_no_thermal: float = 0.50 # confidence cap when the thermal channel is unavailable
+    conflict_tol: float = 0.5         # [A] |thermal evidence| needed to call a real conflict
+                                      # (0.5 × 3 °C tol = the floor must be ≥1.5 °C off baseline)
     # --- temporal filter (S6) ---
     window_s: float = 60.0            # one decision window
     temporal_agree: int = 4            # 4 of last 5 windows must agree
@@ -355,12 +362,83 @@ class TemporalFilter:
 
 
 # ============================================================
+# CROSS-MODAL FUSION (S6) — behavior × thermal agreement = confidence
+# ============================================================
+class Fusion:
+    """Two independent channels vote on the same physical truth:
+      · behavior (spatial dispersion)  B ∈ [−1,+1]: + = hot-type spread, − = cold-type cluster
+      · thermal  (floor temp vs age baseline) T ∈ [−1,+1]: + = above band, − = below
+    Confidence = how strongly they agree. Disagreement is itself a signal
+    (draft / lamp fault / sensor fault) — surfaced as a CHECK event, never
+    trimmed on. Uses the chick-level floor sensor (DS18B20), not the DHT22:
+    chicks feel the floor/radiant microclimate, not the air 30 cm up."""
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.conf = 0.0
+        self.conflict = False
+        self.label = "unknown"
+        self.ev = {"b": 0.0, "t": 0.0, "e": 0.0}
+
+    @staticmethod
+    def _nrm(x: float, lo: float, hi: float) -> float:
+        if hi <= lo:
+            return 0.0
+        return float(np.clip((x - lo) / (hi - lo), 0.0, 1.0))
+
+    def behavior_evidence(self, feats: dict) -> float:
+        """+1 = strongly hot-type dispersion · −1 = strongly cold-type clustering."""
+        cfg = self.cfg
+        b_hot = self._nrm(feats["entropy"], 0.65, 0.95) * self._nrm(0.15 - feats["center_occ"], 0.0, 0.15)
+        b_cold = self._nrm(cfg.nnd_cold_pile - feats["nnd_mean"], 0.0, 3.5) * self._nrm(0.65 - feats["entropy"], 0.0, 0.35)
+        return float(np.clip(b_hot - b_cold, -1.0, 1.0))
+
+    def thermal_evidence(self, floor_c: float, baseline_c: float) -> float:
+        """+1 = floor far above the age baseline · −1 = far below (±tol = full evidence)."""
+        tol = max(1e-6, self.cfg.hot_tol_c)
+        return float(np.clip((floor_c - baseline_c) / tol, -1.0, 1.0))
+
+    def update(self, feats: dict, floor_c: float, baseline_c: float,
+               thermal_ok: bool = True) -> dict:
+        b = self.behavior_evidence(feats)
+        t = self.thermal_evidence(floor_c, baseline_c) if thermal_ok else 0.0
+        e = floor_c - baseline_c
+        ct = self.cfg.conflict_tol
+        same_sign = (b > 0) == (t > 0)
+        # a real conflict needs a *clear* disagreement, not a 1 °C wobble:
+        conflict = (b > 0.3 and t < -ct) or (b < -0.3 and t > ct)
+        if conflict:
+            conf = 0.30 - 0.20 * min(abs(b), abs(t))       # 0.10–0.30 → CHECK, no trim
+            label = "CONFLICT"
+        elif abs(b) > 0.3 and abs(t) > 0.3 and same_sign:
+            conf = 0.60 + 0.40 * min(abs(b), abs(t))       # 0.72–1.00 → confirmed
+            label = "both agree"
+        elif abs(b) > 0.3 and abs(t) > 0.3:
+            # opposite signs but the thermal gap is too small to call a conflict
+            conf = 0.40 + 0.20 * max(abs(b), abs(t))       # → weak disagreement, no trim
+            label = "weak disagreement"
+        elif abs(b) > 0.3 or abs(t) > 0.3:
+            conf = 0.40 + 0.20 * max(abs(b), abs(t))       # 0.46–0.60 → single channel
+            label = "single channel"
+        else:
+            conf = 0.85                                    # both neutral = confident COMFY
+            label = "both neutral"
+        if not thermal_ok:
+            conf = min(conf, self.cfg.conf_cap_no_thermal)
+            label = "thermal unavailable"
+        self.conf, self.conflict, self.label = float(conf), bool(conflict), label
+        self.ev = {"b": round(b, 3), "t": round(t, 3), "e": round(e, 2)}
+        return self.ev
+
+
+# ============================================================
 # TRIM MANAGER (S3) — bounded behavioral trim on the baseline
 # ============================================================
 class TrimManager:
     """trim = clamp(trim + step[state], ±limit); applied only when the
-    decision is confirmed, dwell ≥10 min elapsed, rate ≤1 °C/h, and fan
-    blanking is off. Camera loss → freeze and decay to 0 over 30 min."""
+    decision is confirmed, the fused cross-modal confidence ≥ conf_trim_min,
+    dwell ≥10 min elapsed, rate ≤1 °C/h, and fan blanking is off.
+    Camera loss → freeze and decay to 0 over 30 min."""
 
     STEP = {"COMFY": 0.0, "COLD": +0.5, "HOT": -0.5, "DRAFT": +0.5}
 
@@ -384,7 +462,7 @@ class TrimManager:
     def note_camera_back(self):
         self.cam_lost_at = None
 
-    def update(self, state: str, now: float) -> float:
+    def update(self, state: str, now: float, conf: float = 1.0) -> float:
         cfg = self.cfg
         # camera loss: freeze + linear decay to 0 over 30 min
         if self.cam_lost_at is not None:
@@ -397,6 +475,9 @@ class TrimManager:
         if now < self.fan_until and state in ("DRAFT", "COLD"):
             return self.trim
         if state not in self.STEP:
+            return self.trim
+        if conf < cfg.conf_trim_min:
+            # behavior and temperature don't corroborate strongly enough to act
             return self.trim
         if self.last_change is None:
             # first confirmed window after boot: start the dwell clock
@@ -619,6 +700,7 @@ def run_live(cfg: Config, simulated: bool = False):
     stats = SpatialStats(cfg)
     crowd = CrowdingOverride(cfg)
     temporal = TemporalFilter(cfg)
+    fusion = Fusion(cfg)
     trim = TrimManager(cfg)
     safety = SafetyRules(cfg)
     pid = PID(cfg)
@@ -632,6 +714,8 @@ def run_live(cfg: Config, simulated: bool = False):
     win_pts: List[np.ndarray] = []
     win_deadline = time.time() + cfg.window_s
     confirmed = "COMFY"
+    conf = 0.0                 # fused cross-modal confidence (behavior × thermal)
+    last_check = 0.0           # conflict-event rate limit (5 min)
     env_period = 10.0
     next_env = time.time()
 
@@ -686,13 +770,32 @@ def run_live(cfg: Config, simulated: bool = False):
 
         # ---- baseline + trim + PID (P3/P4) ----
         base = baseline_schedule(cfg.brooding_day, cfg)
-        new_state = temporal.update(
-            stats.classify(feats, cold_floor=(pv < cfg.cold_floor))
-        )
+        # ---- cross-modal fusion: behavior vs temperature agreement → confidence ----
+        thermal_ok = pv is not None and math.isfinite(pv)
+        ev = fusion.update(feats, pv if thermal_ok else base, base, thermal_ok=thermal_ok)
+        conf = fusion.conf
+        # baseline-relative thermal check: the old absolute cold_floor (< 31.5 °C)
+        # was wrong at both ends of the brood — it missed cold in week 1 (a 32–33 °C
+        # floor sits below a 34 °C baseline) and cried cold from ~day 8 on, when the
+        # baseline itself falls under 31.5 °C
+        raw_state = stats.classify(feats, cold_floor=(pv < base - cfg.cold_tol_c))
+        if fusion.conflict:
+            # behavior and temperature disagree → do NOT trim on it; surface it
+            raw_state = "CHECK"
+            if now - last_check >= 300.0:
+                last_check = now
+                telemetry.publish_event("fusion_conflict", {
+                    "behavior": ev["b"], "thermal": ev["t"], "err_c": ev["e"],
+                    "floorT": round(pv, 1), "baseline": round(base, 2),
+                    "hint": "draft / lamp fault / sensor fault — inspect",
+                })
+        new_state = temporal.update(raw_state)
         if new_state:
             confirmed = new_state
-            telemetry.publish_event("state_change", {"state": confirmed})
-        tr = trim.update(confirmed, now)
+            telemetry.publish_event("state_change", {
+                "state": confirmed, "conf": round(conf, 3),
+                "behavior": ev["b"], "thermal": ev["t"]})
+        tr = trim.update(confirmed, now, conf=conf)
         sp = base + tr
         if safe["heater_ok"]:
             duty = pid.update(sp, pv)
@@ -720,6 +823,11 @@ def run_live(cfg: Config, simulated: bool = False):
                 "nh3": round(nh3, 1),
                 "state": confirmed,
                 "crowding": cr["active"],
+                "conf": round(conf, 2),
+                "beh": ev["b"],
+                "th": ev["t"],
+                "err_c": ev["e"],
+                "conflict": fusion.conflict,
             })
         frame_no += 1
 
@@ -754,6 +862,7 @@ def run_replay(cfg: Config, frames_dir: Path):
     stats = SpatialStats(cfg)
     crowd = CrowdingOverride(cfg)
     temporal = TemporalFilter(cfg)
+    fusion = Fusion(cfg)
     out_rows = []
     frames = sorted(frames_dir.glob("*.png")) + sorted(frames_dir.glob("*.jpg"))
     print(f"[replay] {len(frames)} frames in {frames_dir}")
@@ -773,8 +882,10 @@ def run_replay(cfg: Config, frames_dir: Path):
             "center_occ": stats.center_occupancy(pts),
             "radial": stats.radial_distance(pts),
         }
-        cold_floor = read_floor_temp_stub() < cfg.cold_floor
-        raw = stats.classify(feats, cold_floor)
+        pv = read_floor_temp_stub()
+        base = baseline_schedule(cfg.brooding_day, cfg)
+        ev = fusion.update(feats, pv, base)
+        raw = stats.classify(feats, cold_floor=(pv < base - cfg.cold_tol_c))
         win = temporal.update(raw)
         if win:
             confirmed = win
@@ -790,9 +901,15 @@ def run_replay(cfg: Config, frames_dir: Path):
             "raw_state": raw,
             "confirmed_state": confirmed,
             "crowding": cr["active"],
+            "conf": round(fusion.conf, 3),
+            "conflict": fusion.conflict,
+            "behavior_ev": ev["b"],
+            "thermal_ev": ev["t"],
+            "err_c": ev["e"],
         })
         print(f"  {fp.name}: {len(dets)} chicks, NND {nnd['mean']:.1f} cm, "
-              f"H {feats['entropy']:.2f} → {raw}"
+              f"H {feats['entropy']:.2f} → {raw} "
+              f"(conf {fusion.conf:.2f} · beh {ev['b']:+.2f} · th {ev['t']:+.2f})"
               + (f" | CROWDING {'ACTIVE' if cr['active'] else 'streak '+str(cr['streak'])}"
                  if cr["streak"] else ""))
     outp = frames_dir / "replay_results.json"

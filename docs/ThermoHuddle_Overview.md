@@ -84,7 +84,31 @@ These three statistics are the **spatial dispersion analysis** in the project ti
 
 **The control cascade, end to end:** cam frame → positions → spatial stats (+ audio distress) → classifier → comfort state → (dwell 10 min, rate-limited) trim ±0.5 °C on the age baseline → inner PID drives lamp duty (0–100 %) through the zero-cross dimmer → floor temp changes → chicks redistribute → loop repeats. **There is no prediction/forecast anywhere** — the loop is reactive: detect behavior → correct setpoint → verify stabilization.
 
-**Physical limit (honest boundary):** if HOT persists with the lamp at 0 % duty, the brooder is simply tracking outside air — trim cannot cool below ambient. Fans give convective/panting relief only. The correct response is a farmer-action warning: wet-sack evaporative cooling on the fan intake (standard PH practice, −2–4 °C on incoming air), shade, or brooding during cooler hours.
+**Physical limit (honest boundary):** if HOT persists with the lamp at 0 % duty, the brooder is simply tracking outside air — trim cannot cool below ambient. Fans give convective/panting relief only. The correct response is a farmer-action warning: wet-sack evaporative cooling on the fan intake (standard PH practice, −2 to −4 °C on incoming air), shade, or brooding during cooler hours.
+
+### 3.1 Cross-modal confidence — behavior × temperature agreement
+
+Two *independent* channels measure the same physical truth, and the **confidence is how strongly they agree**:
+
+| Channel | Evidence score | What feeds it |
+|---|---|---|
+| **Behavior** (spatial dispersion) | `B ∈ [−1,+1]` — `+` hot-type spread, `−` cold-type cluster | NND, occupancy entropy, center occupancy |
+| **Thermal** (chick-level floor temp) | `T ∈ [−1,+1]` — `+` above band, `−` below | `e = floor − baseline(day)`, `T = clamp(e / 3 °C)` — so the ±3 °C the schedule allows maps to full evidence |
+
+| Situation | Confidence | System response |
+|---|---|---|
+| Both channels agree, strong | **0.72 – 1.00** | confirmed → trim allowed |
+| One channel strong, the other neutral | 0.46 – 0.60 | single channel → **below the gate, no trim** |
+| Both strong but opposite signs, small gap | ~0.40 – 0.60 | weak disagreement → no trim |
+| **Clear disagreement** (behavior vs floor ≥1.5 °C apart) | **0.10 – 0.30** | **CONFLICT → no trim, `fusion_conflict` event** (draft / lamp fault / sensor fault) |
+| Both neutral | 0.85 | confidently comfortable |
+| Thermal channel unavailable | capped at **0.50** | no trim on behavior alone |
+
+- **Gate:** `TrimManager` applies a trim only when confidence ≥ `conf_trim_min` (0.60) **and** the 4-of-5 window filter confirmed the state. Weak or conflicting evidence holds the lamp where it is.
+- **Baseline-relative, not absolute:** the old fixed `cold_floor = 31.5 °C` was wrong at both ends of the brood — it missed cold in week 1 (a 32–33 °C floor is below a 34 °C baseline) and cried cold from ~day 8 on, when the baseline itself drops under 31.5 °C. The thermal channel now always compares against `baseline(day)`, so thresholds follow the age schedule.
+- **Use the DS18B20 floor array for the thermal channel**, not the DHT22 — chicks feel the floor/radiant microclimate, not the air 30 cm up. DHT22 stays for humidity and as a secondary sanity check.
+- **Chapter 4 payoff:** this gives a clean ablation — *behavior-only vs temperature-only vs fused* on accuracy, false trims/day, and % time in comfort band — plus a modality-agreement matrix whose off-diagonal cells are exactly drafts, lamp faults, and sensor faults.
+- **Bonus:** the temperature recorded during high-confidence COMFY windows is the flock's own observed comfort signature — a per-batch adaptive baseline built from evidence rather than assumption.
 
 ---
 

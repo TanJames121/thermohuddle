@@ -257,6 +257,7 @@ The same decision math lives in three places. **If you tune one, update the othe
 | Baseline schedule | `baseline_schedule()` | `baselineForDay()` | th-sensord (S1) |
 | Trim bounds/dwell/fan-blank | `Config` + `TrimManager` | `PLAN` const | th-brain (S3) |
 | Comfort thresholds | `Config` (nnd/entropy/centroid…) | `computeStatsPts()` | th-visiond + th-brain (S4/S6) |
+| Cross-modal confidence (behavior × thermal) | `Fusion` + `Config.conf_*`/`hot_tol_c` | `fuseNow()` + `c-conf` chip | th-brain (S6) |
 | Crowding rule | `CrowdingOverride` | crowd streak/grace block | th-brain (S6) |
 | NH₃/over-temp | `SafetyRules` + `Config` | `PLAN` + alerts | th-sensord (S2) |
 

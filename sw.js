@@ -1,5 +1,5 @@
-/* ThermoHuddle service worker — offline app shell (v6: 15s snapshot poll feed) */
-const CACHE = 'thermohuddle-v6';
+/* ThermoHuddle service worker — offline app shell (v7: cross-modal confidence) */
+const CACHE = 'thermohuddle-v7';
 const ASSETS = [
   './index.html',
   './p5.min.js',
