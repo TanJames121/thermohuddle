@@ -105,11 +105,12 @@ create table behavior_windows (
   resp_s real, stab_s real, alarm_flags jsonb
 );
 
--- one row per actuation (Chapter 4: response + stabilization)
+-- one row per actuation *or* notable event (Chapter 4: response + stabilization)
 create table control_events (
   ts timestamptz primary key,
   run_id text references runs(run_id),
   state text,
+  kind text,                -- 'trim_step' | 'crowding' | 'fusion_conflict' | 'heater_cutoff' | 'lamp_fail' | 'vent'
   trim_before real, trim_after real,
   duty_before real, duty_after real,
   resp_s real, stab_s real,
