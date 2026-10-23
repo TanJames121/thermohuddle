@@ -70,9 +70,18 @@ ThermoHuddle/
 ### 3.2 Tables — paste in the SQL editor
 
 ```sql
+-- experiment dimension: one row per trial run (Chapter 4 arm comparison)
+create table runs (
+  run_id text primary key,                      -- 'A1' | 'B1' | 'B2' …
+  arm text not null check (arm in ('A','B')),   -- A = traditional (trim OFF) · B = ThermoHuddle (trim ON)
+  brooder_id text, chick_count int, breed text,
+  started_at date, ended_at date, ambient_note text
+);
+
 -- 1 Hz raw sensor + spatial data (the training set)
 create table telemetry_raw (
   ts timestamptz primary key,
+  run_id text references runs(run_id),   -- which arm/run this row belongs to
   day int,
   temp_floor_avg real, temp_floor_grid jsonb,
   temp_air real, humidity real,
@@ -89,6 +98,7 @@ create table telemetry_raw (
 -- 30 s aggregates (what the dashboard consumes)
 create table behavior_windows (
   ts timestamptz primary key,
+  run_id text references runs(run_id),
   day int, state text,
   nnd_mean real, entropy real, clark_r real, max_cell_frac real,
   chirp_rate real, trim_applied real,
@@ -98,6 +108,7 @@ create table behavior_windows (
 -- one row per actuation (Chapter 4: response + stabilization)
 create table control_events (
   ts timestamptz primary key,
+  run_id text references runs(run_id),
   state text,
   trim_before real, trim_after real,
   duty_before real, duty_after real,
@@ -110,10 +121,23 @@ create table control_events (
 -- per-version classifier metrics (Pi publishes, app reads)
 create table model_accuracy (
   recorded_at timestamptz primary key,
+  run_id text references runs(run_id),
   version text, trained_at timestamptz,
   accuracy real, f1_macro real, crowd_recall real,
   resp_s real, stab_s real,
   confusion_matrix jsonb, n_windows int
+);
+
+-- mortality log: one row per death (Chapter 4 survival analysis)
+create table deaths (
+  ts timestamptz primary key,
+  run_id text references runs(run_id),
+  day int,                            -- brooding day
+  cause text,                         -- 'smothering' | 'cold' | 'other' | 'culled'
+  state text,                         -- classifier state at the moment of death
+  floor_temp_c real, ambient_c real,  -- conditions at the moment of death
+  crowding_active bool,               -- was a crowding alarm latched?
+  notes text
 );
 ```
 
@@ -136,6 +160,46 @@ create view v_state_transitions as
 create view v_training_export as
   select ts, day, positions, temp_floor_avg, temp_air, nh3_ppm, audio, state
   from telemetry_raw;
+
+-- ── Chapter 4 arm comparison ─────────────────────────────────────────────
+-- per-day mortality by arm
+create view v_mortality as
+  select r.arm, date_trunc('day', d.ts) as day,
+         count(*) filter (where d.cause <> 'culled')     as deaths,
+         count(*) filter (where d.cause = 'smothering')  as smothering,
+         count(*) filter (where d.cause = 'cold')        as cold_stress
+  from deaths d join runs r using (run_id)
+  group by 1, 2 order by 1, 2;
+
+-- headline survival per run + normalised rate
+create view v_arm_survival as
+  with dd as (
+    select run_id,
+           count(*) filter (where cause <> 'culled')     as deaths,
+           count(*) filter (where cause = 'smothering')  as smothering_deaths
+    from deaths group by 1
+  )
+  select r.run_id, r.arm, r.chick_count,
+         coalesce(dd.deaths, 0)             as deaths,
+         coalesce(dd.smothering_deaths, 0)  as smothering_deaths,
+         round(100.0 * (r.chick_count - coalesce(dd.deaths, 0)) / r.chick_count, 1) as survival_pct,
+         round(100.0 * coalesce(dd.deaths, 0)
+               / (((r.chick_count + (r.chick_count - coalesce(dd.deaths, 0))) / 2.0)
+                  * greatest(1, r.ended_at - r.started_at)), 2) as deaths_per_100_chick_days
+  from runs r left join dd using (run_id);
+
+-- comfort time + event counts per arm
+create view v_comfort_by_arm as
+  select r.arm, r.run_id,
+         round(100.0 * avg((w.state = 'COMFY')::int), 1) as pct_time_comfortable,
+         count(*) as windows
+  from behavior_windows w join runs r using (run_id)
+  group by 1, 2;
+
+create view v_arm_events as
+  select r.arm, r.run_id, e.kind, count(*) as n
+  from control_events e join runs r using (run_id)
+  group by 1, 2, 3 order by 1, 2, 3;
 ```
 
 ### 3.4 Indexes + RLS (read-only for the public app)
@@ -144,11 +208,12 @@ create view v_training_export as
 create index on telemetry_raw (ts desc);
 create index on behavior_windows (ts desc);
 create index on control_events (ts desc);
+create index on deaths (ts desc);
 
 -- the anon key is public in the HTML → SELECT-only
 alter table telemetry_raw enable row level security;
 create policy "anon read" on telemetry_raw for select to anon using (true);
--- repeat enable+policy per table (behavior_windows, control_events, model_accuracy)
+-- repeat enable+policy per table (runs, behavior_windows, control_events, model_accuracy, deaths)
 ```
 
 **Never ship the service key in the HTML** — writes happen only from the Pi via the service role key.
@@ -248,7 +313,64 @@ Build order is dependency-driven: **heater control and safety work before any AI
 
 ---
 
-## 7. Keeping the artifacts in sync
+## 7. Chapter 4 — comparison plan (Arm A vs Arm B + local RRLs)
+
+**The claim to support:** *"ThermoHuddle improved survival and increased comfortability using spatial dispersion and behavioural analysis."*
+Only one design can carry that claim: **your own Arm A vs Arm B**. The 5 local RRLs are context, never proof.
+
+### 7.1 The two arms — identical hardware, one flag
+
+| | **Arm A — traditional** | **Arm B — with ThermoHuddle** |
+|---|---|---|
+| Control logic | fixed age-schedule setpoint → PID → lamp (no behaviour input) | behavioural trim → setpoint → PID → lamp |
+| Software | **same firmware**, trim disabled (`TrimManager.trim_off()`) | trim enabled |
+| Chicks · brooder · camera · sensors | identical, same batch, same age | identical |
+
+Make Arm A a **thermostat on the recommended curve (34→29 °C)** — already better than the PH smallholder norm (bulb or charcoal stove, hand-adjusted). Beating *that* means beating usual practice too, and it blocks the objection that your gain came from merely "having a thermostat."
+One brooder only? Alternate Run A → Run B and **record daily ambient min/max** (season drift is otherwise a confound). Two identical brooders side by side is the strongest version.
+
+### 7.2 Metric definitions (write these into Chapter 3 before collecting)
+
+| Metric | Definition | Why it matters |
+|---|---|---|
+| **Survival %** | (alive at day 14 ÷ placed at day 0) × 100 | the headline number — state the window; RRLs often use 0–21 or 0–42 |
+| **Mortality / 100 chick-days** | deaths ÷ mean population ÷ days × 100 | normalises batch size and duration → comparable across studies |
+| **Cause attribution** | smothering / cold stress / other / culled — logged with the state + flags at the moment of death | links deaths to crowding episodes: your strongest single result if it occurs |
+| **Comfortability** | % of windows with state = COMFY + crowding-episode count | measured per-day ⇒ far more statistical power than mortality |
+
+### 7.3 Statistics — be honest about power
+
+- **n = 50/arm cannot detect small survival differences.** A 5-point gap (95 % vs 90 %) is 2–3 birds. At 50/arm you need roughly a **20-point** difference for 80 % power — run the power calculation and state the smallest detectable effect in Chapter 3.
+- Two proportions → **Fisher's exact test** + **95 % CI of the difference** (Wilson/Newcombe) + risk difference. Not χ².
+- Comfort (% time in band, daily) → **Wilcoxon signed-rank** across days — this is where n = 50 is plenty.
+- Repeating 2–3 cycles and pooling chick-days is what turns survival from "trending" into a defensible result.
+
+### 7.4 Defensible claim template
+
+> Arm B spent **X %** of brooding hours inside the comfort band vs **Y %** in Arm A (Wilcoxon *p* = …), with **Z** crowding episodes vs **W**. Survival was **B %** vs **A %** (Fisher *p* = …, 95 % CI of the difference …, n = 50/arm). The survival difference did not reach significance at this sample size, and both arms fell inside the mortality range reported by local studies (…).
+
+### 7.5 What to extract from each of the 5 local RRLs
+
+breed · n · brooding method (bulb / charcoal / gas / infrared) · days counted · mortality definition · location & season · reported outcomes (mortality, livability, ADG, FCR, uniformity) · **and whether any comfort or behaviour metric exists** (expect ~1 of 5 — say so explicitly; your comfort metric is then a *contribution*, not a gap).
+
+Use them two ways: (a) show **your Arm A is typical** of the local baseline (this validates the setup), and (b) place Arm B at the favourable end of the reported range.
+
+### 7.6 Chapter 4 output table
+
+| Metric | Arm A | Arm B | Local RRL range |
+|---|---|---|---|
+| Survival % (0–14 d) | | | |
+| Mortality / 100 chick-days | | | |
+| Cause breakdown (smothering / cold / other) | | | |
+| % time in comfort band | | | *rarely reported — your contribution* |
+| Crowding episodes | | | |
+| Energy (kWh) · response / stabilization times | | | |
+
+All of it is computable from `runs`, `deaths`, `behavior_windows` and `control_events` via the arm views in **§3.3** (`v_arm_survival`, `v_mortality`, `v_comfort_by_arm`, `v_arm_events`).
+
+---
+
+## 8. Keeping the artifacts in sync
 
 The same decision math lives in three places. **If you tune one, update the others:**
 
@@ -263,7 +385,7 @@ The same decision math lives in three places. **If you tune one, update the othe
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -272,7 +394,7 @@ The same decision math lives in three places. **If you tune one, update the othe
 | ⚡ says "error" | Broker WS listener down → `listener 9001 / protocol websockets` in mosquitto conf; restart |
 | Works on-site, not from home | Different network → Setup B (cloud broker + `wss://`) |
 | LIVE values don't match HUD expectations | Old app version → reload twice (SW updates on second load); or telemetry missing fields |
-| Wrong classifications on real data | Tune thresholds via `--replay`, then update **all three artifacts** (§7) |
+| Wrong classifications on real data | Tune thresholds via `--replay`, then update **all three artifacts** (§8) |
 | Chicks not detected | `px_per_cm` calibration off; blob area limits too tight/loose; IR pods too dim |
 | Alarm won't clear | Crowding latch clears only after sustained dispersal (real system: human ack via `cmd/#`) |
 | Feed button shows nothing | No `feed_url` in broker.js and not served from the Pi → use the snapshot loop (§3.5) or same Wi-Fi |

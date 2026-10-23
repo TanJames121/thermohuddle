@@ -196,7 +196,10 @@ The trained AI **must have raw data** and draw its own conclusions — so the sc
 - **`behavior_windows`** (30 s aggregates) — what the dashboard consumes.
 - **`control_events`** — one row per actuation: trim/duty before+after, `resp_s`, `stab_s`, and the `img_before`/`img_after` evidence pair.
 - **`model_accuracy`** — per-version classifier metrics published by the Pi (accuracy, F1, crowding recall, confusion matrix).
-- Chapter-4 views: daily comfort summary, state-transition matrix, hourly baseline, crowd episodes, and the training export (raw positions + labels).
+- **`runs`** — the experiment dimension: one row per trial (`run_id`, `arm` A = traditional / B = ThermoHuddle, brooder, chick count, dates). Every fact table carries `run_id`, so any metric can be split by arm.
+- **`deaths`** — one row per death with **cause** (smothering / cold / other / culled), the classifier state at that moment, floor + ambient temperature, and whether a crowding alarm was latched. This is what links mortality to behaviour episodes.
+- Chapter-4 views: daily comfort summary, state-transition matrix, hourly baseline, crowd episodes, training export (raw positions + labels), and the **arm-comparison set** — `v_arm_survival`, `v_mortality`, `v_comfort_by_arm`, `v_arm_events`.
+- The full survival/comfort protocol (Arm A vs Arm B, metric definitions, Fisher + Wilcoxon testing, power limits, RRL extraction checklist) is **Build Guide §7**.
 
 > **Training note:** `positions` jsonb is the raw training data. The model consumes positions + temp + audio → infers comfort. Labels come from the Phase-1 pilot where humans label behavior windows (with Cohen's κ agreement); the model then learns the mapping raw→comfort itself.
 
