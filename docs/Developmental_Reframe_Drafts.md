@@ -6,6 +6,27 @@ descriptions) stays. Written to match the register of DESIGN-1-TANVERSE._
 
 ---
 
+## 0. Paper map — what changes, what stays
+
+| Paper section | Status | Action |
+|---|---|---|
+| Title page | ✏️ EDIT | fix "aispersion", fill DATE/ADVISER/INSTRUCTOR/RESEARCHERS |
+| Abstract | ✏️ EDIT | reword outcome claims (see §6.1 wording rules); add "developed and evaluated" |
+| 1.1 Introduction | ✅ KEEP | no changes needed |
+| 1.2 Conceptual Framework | ✅ KEEP | no changes needed |
+| 1.3 Research Paradigm | ✏️ EDIT | add one developmental-design line (§1 below); delete the duplicate scrambled IPO text block |
+| 1.4 Statement of the Problem | 🔁 REPLACE | use §2 below verbatim (old 4 questions deleted) |
+| 1.5 Hypothesis | 🔁 REPLACE / optional ❌ DELETE | use §3 below (or remove section) |
+| 1.6 Significance of the Study | ✅ KEEP | no changes needed |
+| 1.7 Scope and Delimitation | ✏️ EDIT (optional) | may add one line: evaluation was descriptive; no disease diagnosis (already there) |
+| 1.8 Definition of Terms | ➕ ADD 2–3 terms | Developmental Research Design, ISO/IEC 25010, Acceptability |
+| Ch. 2 Review of Related Literature | ✅ KEEP | no changes needed |
+| Ch. 3 | ➕ NEW + ✏️ EDIT | add §4 and §5 below (Research Design, Evaluation Instrument); fix "(chan)" comments, "aesign/aiagram" typos, figure numbering |
+| Ch. 4 Testing and Validation | 🔁 RETITLE + ✏️ EDIT + ❌ DELETE | retitle "Testing and **Evaluation**"; reframe per §6 below; **DELETE soil-thesis tables 4.3–4.6 + heavy-metal content**; ADD acceptability results table |
+| Ch. 5 | ✏️ EDIT | Summary/Conclusion answer the new SOP; controlled experiment moves to Recommendations (§7 below) |
+
+---
+
 ## 1. §1.3 Research Paradigm — one-line addition
 
 Append after the IPO table (before the paragraph explanation):
@@ -165,6 +186,33 @@ is the safest middle ground if the template requires one.)_
 _(All Chapter 4 data tables from the old plan — runs/deaths/arm views in
 Supabase — remain exactly as built; only the framing changes from "test the
 hypothesis" to "describe the evaluation.")_
+
+### 6.1 Wording rules for every claim in the paper (abstract, Ch. 4, Ch. 5)
+
+Developmental wording = **report what the system measured, detected, and
+maintained, with numbers** — never claim it *caused* a change in the animals or
+the environment. Compare against **standards and literature ranges** (allowed),
+not against a control group with a significance verdict (that's the future-work
+experiment).
+
+| ❌ Don't say (causal/experimental) | ✅ Say (developmental) |
+|---|---|
+| "ThermoHuddle **reduced** mortality" | "The system attained a **14-day survival rate of X %**, with every death logged and attributed (cause, classifier state, temperatures)" |
+| "It **improved** survival vs. thermostats" | "Survival was **X %** under ThermoHuddle vs. **Y %** under conventional thermostat operation monitored alongside" — both numbers, no verdict |
+| "It **improved** the air quality" | "NH₃ was **maintained below the 25-ppm vent threshold for X %** of the brooding period (mean __ ppm, max __ ppm); the exhaust fan activated within __ s of each threshold crossing" |
+| "It **kept** ammonia at safe levels *(causal 'kept')*" | "Measured NH₃ **remained within the range recommended for poultry housing** ([RRL/standard])" |
+| "It **prevented** smothering" | "The system **detected and alarmed N crowding episodes**, all acknowledged, with no smothering event during the evaluation" |
+| "It **made** chicks more comfortable" | "The flock was classified **COMFORTABLE in X %** of behavior windows (mean NND __ cm, entropy __, Clark–Evans R __)" |
+| "It **lowered** cold stress" | "Floor temperature was **maintained within the recommended band for X %** of brooding hours (max deviation __ °C, mean recovery __ s)" |
+| "It **saved** energy" | "Lamp duty cycle averaged **X %** (≈ __ kWh over 14 days)" |
+
+**Two legit comparison moves that stay:**
+1. **vs. standards / RRL ranges** — "NH₃ remained below the [standard] limit";
+   "survival falls within the range local studies report (…–…%)". Citing
+   published benchmarks is fine in any design.
+2. **side-by-side reference numbers** — Arm A data may be *shown* next to Arm B,
+   labeled "reference operation," with no significance test and no superiority
+   verdict. The panel can see the difference; the paper doesn't claim it.
 
 ---
 
