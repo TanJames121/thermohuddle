@@ -70,7 +70,7 @@ ThermoHuddle/
 ### 3.2 Tables — paste in the SQL editor
 
 ```sql
--- experiment dimension: one row per trial run (Chapter 4 arm comparison)
+-- trial dimension: one row per trial run (Chapter 4 evaluation — A = reference, B = ThermoHuddle)
 create table runs (
   run_id text primary key,                      -- 'A1' | 'B1' | 'B2' …
   arm text not null check (arm in ('A','B')),   -- A = traditional (trim OFF) · B = ThermoHuddle (trim ON)
@@ -314,10 +314,13 @@ Build order is dependency-driven: **heater control and safety work before any AI
 
 ---
 
-## 7. Chapter 4 — comparison plan (Arm A vs Arm B + local RRLs)
+## 7. Chapter 4 — evaluation plan (descriptive, with an optional reference comparison)
 
-**The claim to support:** *"ThermoHuddle improved survival and increased comfortability using spatial dispersion and behavioural analysis."*
-Only one design can carry that claim: **your own Arm A vs Arm B**. The 5 local RRLs are context, never proof.
+> **Framing (per the Oct 2026 adviser decision):** the study now uses a **developmental research design**. Chapter 4 **describes the performance and acceptability of the developed system** — it does **not** test hypotheses or claim causal superiority. The Arm A/B materials below are kept because the *data collection is identical*; only the framing changed. For the paper's rewrite language, see `docs/Developmental_Reframe_Drafts.md`.
+
+**The results to report:** *ThermoHuddle was developed and evaluated; the developed system attained [survival %], [time in comfort band], [response/stabilization times], and [crowding episodes] over a 14-day brooding period, and was rated [interpretation] in acceptability (ISO/IEC 25010).*
+
+Conventional thermostat operation (Arm A) is monitored **as a descriptive reference point** — both numbers are reported side by side; no significance verdict is drawn in Chapter 4. A fully powered controlled experiment is **future work** (Chapter 5 recommendation).
 
 ### 7.1 The two arms — identical hardware, one flag
 
@@ -339,16 +342,15 @@ One brooder only? Alternate Run A → Run B and **record daily ambient min/max**
 | **Cause attribution** | smothering / cold stress / other / culled — logged with the state + flags at the moment of death | links deaths to crowding episodes: your strongest single result if it occurs |
 | **Comfortability** | % of windows with state = COMFY + crowding-episode count | measured per-day ⇒ far more statistical power than mortality |
 
-### 7.3 Statistics — be honest about power
+### 7.3 Statistics — descriptive first, inferential as future work
 
-- **n = 50/arm cannot detect small survival differences.** A 5-point gap (95 % vs 90 %) is 2–3 birds. At 50/arm you need roughly a **20-point** difference for 80 % power — run the power calculation and state the smallest detectable effect in Chapter 3.
-- Two proportions → **Fisher's exact test** + **95 % CI of the difference** (Wilson/Newcombe) + risk difference. Not χ².
-- Comfort (% time in band, daily) → **Wilcoxon signed-rank** across days — this is where n = 50 is plenty.
-- Repeating 2–3 cycles and pooling chick-days is what turns survival from "trending" into a defensible result.
+- **Chapter 4 reports descriptives only:** survival %, mortality/100 chick-days, % time in comfort band, crowding-episode counts, response/stabilization times — as means, percentages, and ranges per day and overall (developmental design; no hypothesis tests).
+- **Arm A data is still collected** so both arms can be reported side by side as a reference comparison — without significance claims.
+- **Future work (Chapter 5):** a fully powered controlled experiment. If pursued later: **n = 50/arm cannot detect small survival differences** — a 5-point gap (95 % vs 90 %) is 2–3 birds; at 50/arm you need roughly a **20-point** difference for 80 % power. Two proportions → **Fisher's exact test** + **95 % CI of the difference** (Wilson/Newcombe); comfort (% time in band, daily) → **Wilcoxon signed-rank**. Repeating 2–3 cycles and pooling chick-days is what turns survival from "trending" into a defensible result.
 
-### 7.4 Defensible claim template
+### 7.4 Defensible claim template (developmental wording)
 
-> Arm B spent **X %** of brooding hours inside the comfort band vs **Y %** in Arm A (Wilcoxon *p* = …), with **Z** crowding episodes vs **W**. Survival was **B %** vs **A %** (Fisher *p* = …, 95 % CI of the difference …, n = 50/arm). The survival difference did not reach significance at this sample size, and both arms fell inside the mortality range reported by local studies (…).
+> Over a 14-day brooding period, the developed system spent **X %** of brooding hours inside the comfort band, recorded **Z** crowding episodes (all alarmed and acknowledged), and attained a survival rate of **B %** (reference operation: **Y %** in band, **W** episodes, **A %** survival). Both figures fall within the ranges reported by local studies (…). The system was rated **[interpretation]** in acceptability (weighted mean …, ISO/IEC 25010).
 
 ### 7.5 What to extract from each of the 5 local RRLs
 
@@ -358,7 +360,7 @@ Use them two ways: (a) show **your Arm A is typical** of the local baseline (thi
 
 ### 7.6 Chapter 4 output table
 
-| Metric | Arm A | Arm B | Local RRL range |
+| Metric | ThermoHuddle | Reference (traditional) | Local RRL range |
 |---|---|---|---|
 | Survival % (0–14 d) | | | |
 | Mortality / 100 chick-days | | | |
@@ -366,6 +368,7 @@ Use them two ways: (a) show **your Arm A is typical** of the local baseline (thi
 | % time in comfort band | | | *rarely reported — your contribution* |
 | Crowding episodes | | | |
 | Energy (kWh) · response / stabilization times | | | |
+| Acceptability (ISO 25010, weighted mean) | | *survey rates the developed system* | |
 
 All of it is computable from `runs`, `deaths`, `behavior_windows` and `control_events` via the arm views in **§3.3** (`v_arm_survival`, `v_mortality`, `v_comfort_by_arm`, `v_arm_events`).
 
