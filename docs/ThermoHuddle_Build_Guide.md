@@ -22,6 +22,8 @@ ThermoHuddle/
 └── pipeline/
     ├── thermohuddle_draft_v2.py        ← Pi pipeline draft (31 unit checks)
     └── test_broker_ws.py               ← demo MQTT broker (zero-hardware demo)
+└── firmware/
+    └── esp32_tests/                    ← ESP32 sensor bench tests (01–05) + README
 ```
 
 ---
