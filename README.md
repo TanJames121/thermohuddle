@@ -10,10 +10,11 @@ Team: Bolda · Gabriel · Payumo · Tan · Tangcuangco
 
 Or run locally: double-click `start_app.bat` (Windows) / `bash start_app.sh` (Pi/Linux/Mac) → `http://localhost:8422/index.html`.
 
-- **LIVE**: tap the **⚡ chip** — connects MQTT (reads `broker.js`, or falls back to `ws://<host>:9001`). Telemetry is authoritative; the app never re-simulates.
-- **🎥** toggles 3D tracking dots ↔ live camera feed (set `feed_url` in `broker.js`; recommended: snapshot loop to Supabase Storage).
-- **🎛 scenarios** (Comfy/Cold/Hot/Draft/Crowding/Lamp-fail/NH₃, Auto, Next-day) are demo/debug only — the app boots in LIVE and waits for real data.
-- **📊 Stats · 📈 History (24h/weekly/monthly) · 🔬 Analytics (CSV export, response/stabilization metrics) · 🗒 Logs · ⚠️ Warnings**
+- **GitHub Pages LIVE:** opens in observation mode and automatically checks the public HTTPS camera/microphone snapshot every 2 seconds while visible. No MQTT password or connect click is needed. New readings appear at the Pi pipeline cadence (currently about 10 seconds), not at a fabricated animation rate. Hidden tabs pause requests and refresh when visible again.
+- **Local LIVE:** MQTT remains available through private, ignored `broker.js`; same-origin Pi JSON is the fallback. Never commit publisher credentials to a public repository.
+- **Camera view:** a spatial reconstruction of motion regions, not live video or a validated chick count. Video needs a separately configured stream.
+- **Camera/mic pilot:** temperature, humidity and ammonia are not connected. Thermal controls, thermal history/export and comfort claims are unavailable in LIVE mode. Scenario controls explicitly use simulated data.
+- **Panels:** Overview, History, Analytics, Field log and Warnings. The Pi and its cloud bridge must stay running for fresh remote observations.
 
 ## Repo layout
 
@@ -25,7 +26,8 @@ Or run locally: double-click `start_app.bat` (Windows) / `bash start_app.sh` (Pi
 | `broker.js.example`, `mosquitto.conf.example` | Broker credentials/config templates (keep real `broker.js` out of git) |
 | **`docs/ThermoHuddle_Overview.md`** | **What the project is + how every feature works** — comfort states, spatial science (NND/Shannon/Clark–Evans), app manual, data model |
 | **`docs/ThermoHuddle_Build_Guide.md`** | **How to build it** — run/install, Supabase setup (full SQL), remote monitoring, Pi deployment, 16-week roadmap, troubleshooting |
-| `docs/design/` | FigCraft design files (historical) |
+| `brooder.css`, `pilot.js`, `cloud-feed.js` | Brooder-themed design, honest pilot status and automatic public HTTPS updates |
+| `docs/design/` | Pilot design notes, desktop/mobile previews and browser verification records |
 | `pipeline/thermohuddle_draft_v2.py` | Pi pipeline draft: detection → spatial features → classification → trim manager → PID → telemetry. Modes: `--simulate`, `--replay`, `--camera` |
 | `pipeline/test_broker_ws.py` | Test MQTT broker simulating Pi telemetry — demo the whole remote-monitoring story with zero hardware (`python pipeline/test_broker_ws.py`, needs `pip install amqtt`) |
 

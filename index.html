@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ThermoHuddle — Flock Monitor</title>
 <script src="p5.min.js"></script>
 <script src="mqtt.min.js"></script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<meta name="theme-color" content="#eaf8c2">
+<meta name="theme-color" content="#f5f2e9">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -282,64 +282,107 @@
   .scen.danger.active { background: var(--red-soft); border-color: var(--red); }
   .scenrow2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
 </style>
+<link rel="stylesheet" href="brooder.css">
 </head>
-<body>
+<body data-mode="live">
+<svg class="icon-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-chick" viewBox="0 0 24 24"><path d="M18 10a5 5 0 0 0-10 0v1H4c0 5 3 8 8 8s8-3 8-7l-2-2Z"/><path d="m18 8 4 2-4 1M9 20l-1 2m6-2 1 2M2 5l2 1M6 2l1 2"/><circle cx="15" cy="8" r=".7" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="m8 6 2-3h4l2 3"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 4v16m8-16v16m8-16v16M1 8h6m2 8h6m2-10h6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13a9 9 0 1 1-10-10 7 7 0 0 0 10 10Z"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M6 16l4-6 4 3 6-9"/></symbol>
+  <symbol id="i-analysis" viewBox="0 0 24 24"><path d="M5 20V10m7 10V4m7 16v-7M2 22h20"/></symbol>
+  <symbol id="i-notes" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="19" rx="2"/><path d="M8 8h8m-8 5h8m-8 5h4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Zm0 6v5m0 3v.1"/></symbol>
+  <symbol id="i-thermo" viewBox="0 0 24 24"><path d="M9 14.5V5a3 3 0 0 1 6 0v9.5a5 5 0 1 1-6 0ZM12 7v11"/></symbol>
+  <symbol id="i-air" viewBox="0 0 24 24"><path d="M3 8h13a3 3 0 1 0-3-3M3 12h17a2 2 0 1 1-2 2M3 16h7a3 3 0 1 1-3 3"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M20 3C8 2 1 7 5 16c9 4 16-1 15-13ZM4 21 15 10"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 6-9 10-9 10S3 18 3 12V6l9-4Zm-4 10 3 3 5-6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/></symbol>
+</svg>
 <div id="app">
 
   <div id="topbar">
-    <div class="logo">🐤</div>
+    <div class="logo" aria-hidden="true"><svg class="icon"><use href="#i-chick"/></svg></div>
     <div class="tt">
       <div class="t1">ThermoHuddle</div>
-      <div class="t2" id="subtitle">Day 1 · baseline 34.0°C</div>
+      <div class="t2" id="subtitle">BEHAVIORAL COMFORT LAB</div>
     </div>
-    <div id="connchip" title="Connect MQTT (broker.js or same-host:9001)">⚡ offline</div>
+    <div class="top-context"><span class="status-dot"></span> EDGE OBSERVATION / RPi 5</div>
+    <button id="connchip" type="button" title="Connect or disconnect MQTT">Connect MQTT</button>
   </div>
+
+  <section id="intro" aria-labelledby="intro-title">
+    <div><div class="eyebrow">A closer look at little lives</div><h1 id="intro-title">Your flock, <em>in focus.</em></h1><p>Small movements. Tiny sounds. A clearer picture of the brooder, one observation at a time.</p></div>
+    <div class="pilot-stamp"><strong id="pilot-mode-name"><svg class="icon" aria-hidden="true"><use href="#i-leaf"/></svg>Camera + mic pilot</strong><span class="stamp-note">Built to listen. Learning to see.<br>Thermal sensing comes next.</span></div>
+  </section>
 
   <div id="statebanner">
     <div class="dot" id="sbdot"></div>
     <div class="sb-main">
-      <div class="sb-state" id="sbstate">COMFORTABLE</div>
-      <div class="sb-sub" id="sbsub">flock evenly distributed · trim +0.0°C</div>
+      <div class="sb-state" id="sbstate" role="status" aria-live="polite">Waiting for the brooder</div>
+      <div class="sb-sub" id="sbsub">Camera + microphone · observation only</div>
     </div>
     <div class="sb-temp">
-      <div class="v" id="sbtemp">32.5°</div>
-      <div class="k">floor</div>
+      <div class="v" id="sbtemp">—</div>
+      <div class="k" id="sbtemp-label">sample age</div>
     </div>
   </div>
 
-  <div id="viewport">
-    <canvas id="p5canvas"></canvas>
+  <section id="observation" aria-labelledby="spatial-title">
+    <div class="observation-head"><div><div class="section-index">01 / THE BROODER</div><h2 id="spatial-title">A bird’s-eye perspective</h2></div><span class="source-tag" id="camera-source">NoIR camera · waiting</span></div>
+  <div id="viewport" aria-label="Interactive 3D reconstruction of camera-derived motion regions">
+    <canvas id="p5canvas" aria-hidden="true"></canvas>
     <video id="livefeed" autoplay playsinline muted></video>
-    <div id="vplabel">🥚 3D brooder</div>
+    <div id="vplabel">SPATIAL VIEW / WAITING</div>
     <div id="vpbtns">
-      <div class="vpb" id="btnfeed" title="Toggle dots / live feed">🎥</div>
-      <div class="vpb" id="btnscen" title="Scenarios">🎛</div>
-      <div class="vpb" id="btndark" title="Dark mode">🌙</div>
-      <div class="vpb" id="btnsnap" title="Save PNG">📸</div>
+      <button class="vpb" id="btnfeed" type="button" aria-label="Toggle configured camera stream" title="Camera stream (requires separate stream setup)"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg></button>
+      <button class="vpb" id="btnscen" type="button" aria-label="Open demonstration scenarios" title="Demonstration scenarios"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg></button>
+      <button class="vpb" id="btndark" type="button" aria-label="Toggle dark theme" aria-pressed="false" title="Toggle dark theme"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+      <button class="vpb" id="btnsnap" type="button" aria-label="Save spatial view as PNG" title="Save spatial view"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
     </div>
+    <div class="viewport-bottom"><span class="view-key"><i></i> Motion regions</span><span class="coordinates">SPATIAL RECONSTRUCTION<br>NOT A LIVE VIDEO FEED</span></div>
   </div>
+    <div class="observation-caption"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="observation-note">Camera-derived positions, not live video. Drag to orbit; scroll to zoom.</span></div>
+    <div class="audio-panel"><div class="audio-top"><span class="audio-title"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg>A little sound tells a story.</span><span class="audio-number"><span id="audio-level">—</span> <small>dBFS</small></span></div><div class="audio-chart" id="audio-chart" role="img" aria-label="Recent received microphone levels; numeric reading above"></div><div class="audio-foot"><span id="audio-label">Waiting for live sound samples</span><span id="audio-peak">Peak —</span></div></div>
+  </section>
 
   <div id="sheet">
     <div class="grab"></div>
     <div id="pages">
 
       <div class="page active" id="page-stats">
+        <div class="panel-title"><div><div class="section-index">02 / THE SIGNALS</div><h2>What we’re picking up</h2></div><span class="source-tag">PILOT STAGE</span></div>
+        <div class="pilot-summary pilot-only">
+          <div class="signal-card"><div class="signal-name"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg>Camera detections</div><div class="signal-number" id="signal-count">—</div><div class="signal-detail" id="signal-camera-state">Waiting for a valid camera sample</div></div>
+          <div class="signal-card"><div class="signal-name"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg>Microphone level</div><div class="signal-number"><span id="signal-level">—</span> <small>dBFS</small></div><div class="signal-detail" id="signal-mic-state">Awaiting microphone</div></div>
+        </div>
+        <div class="pilot-note demo-only"><p><strong>Demonstration mode.</strong> Flock, thermal values and alarms below are simulated. No hardware is controlled.</p></div>
+        <div class="subheading">Spatial descriptors <span>Calibration pending</span></div>
         <div class="stats">
-          <div class="stat"><div class="v" id="m-set">34.0°</div><div class="k">setpoint</div></div>
+          <div class="stat control-metric"><div class="v" id="m-set">—</div><div class="k">setpoint</div></div>
           <div class="stat"><div class="v" id="m-nnd">—</div><div class="k">nnd</div></div>
           <div class="stat"><div class="v" id="m-ent">—</div><div class="k">entropy</div></div>
           <div class="stat"><div class="v" id="m-r">—</div><div class="k">clark R</div></div>
-          <div class="stat"><div class="v" id="m-duty">80%</div><div class="k">lamp duty</div></div>
-          <div class="stat"><div class="v" id="m-nh3">6</div><div class="k">nh₃ ppm</div></div>
-          <div class="stat"><div class="v" id="m-count">50</div><div class="k">chicks</div></div>
+          <div class="stat control-metric"><div class="v" id="m-duty">Off</div><div class="k">lamp duty</div></div>
+          <div class="stat control-metric"><div class="v" id="m-nh3">—</div><div class="k">nh₃ ppm</div></div>
+          <div class="stat"><div class="v" id="m-count">—</div><div class="k">motion regions</div></div>
           <div class="stat" id="m-cellwrap"><div class="v" id="m-cell">—</div><div class="k">max cell</div></div>
         </div>
-        <div class="chips">
+        <div class="chips legacy-controls">
           <div class="chip"><div class="k">baseline</div><div class="v" id="c-base">34.0°C</div></div>
           <div class="chip" id="c-trimwrap"><div class="k">behavioral trim</div><div class="v" id="c-trim">+0.0°C</div></div>
           <div class="chip" id="c-crowdwrap"><div class="k">crowding rule</div><div class="v" id="c-crowd">clear</div></div>
           <div class="chip" id="c-confwrap"><div class="k">cross-check conf</div><div class="v" id="c-conf">—</div></div>
         </div>
+        <div class="pilot-only"><div class="subheading">Room to grow <span>Sensors can wait</span></div><div class="sensor-list">
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-thermo"/></svg></span><span class="sensor-name">Floor temperature<small>DS18B20 array</small></span><span class="sensor-state">Not connected</span></div>
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-air"/></svg></span><span class="sensor-name">Air & humidity<small>DHT22</small></span><span class="sensor-state">Not connected</span></div>
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-leaf"/></svg></span><span class="sensor-name">Ammonia<small>MQ-137</small></span><span class="sensor-state">Not connected</span></div>
+        </div><div class="pilot-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><p><strong>Observe. Don’t actuate.</strong> Thermal inputs are not installed. Heater and fan control are not enabled in this interface.</p></div></div>
         <div id="crowdcard">
           <div class="ct">⚠ CROWDING ALARM — acknowledge required</div>
           <div class="cs">Alarm + ventilation burst + notification sent · re-alerts every 5 min until acknowledged.</div>
@@ -404,38 +447,43 @@
 
     </div>
 
-    <div id="nav">
-      <div class="navbtn active" data-p="stats"><span class="ic">📊</span><span class="lb">Stats</span></div>
-      <div class="navbtn" data-p="hist"><span class="ic">📈</span><span class="lb">History</span></div>
-      <div class="navbtn" data-p="analytics"><span class="ic">🔬</span><span class="lb">Analytics</span></div>
-      <div class="navbtn" data-p="logs"><span class="ic">🗒</span><span class="lb">Logs</span></div>
-      <div class="navbtn" data-p="warn"><span class="ic">⚠️</span><span class="lb">Warnings</span></div>
-    </div>
+    <nav id="nav" aria-label="Observation panels">
+      <button class="navbtn active" type="button" data-p="stats"><span class="ic"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><span class="lb">Overview</span></button>
+      <button class="navbtn" type="button" data-p="hist"><span class="ic"><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg></span><span class="lb">History</span></button>
+      <button class="navbtn" type="button" data-p="analytics"><span class="ic"><svg class="icon" aria-hidden="true"><use href="#i-analysis"/></svg></span><span class="lb">Analytics</span></button>
+      <button class="navbtn" type="button" data-p="logs"><span class="ic"><svg class="icon" aria-hidden="true"><use href="#i-notes"/></svg></span><span class="lb">Field log</span></button>
+      <button class="navbtn" type="button" data-p="warn"><span class="ic"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span><span class="lb">Warnings</span></button>
+    </nav>
   </div>
 
-  <div id="scensheet">
+  <footer id="footnote"><div><span class="footer-brand">Thermo<em>Huddle</em></span> / EDGE AI · SMALL LIVES, THOUGHTFULLY OBSERVED</div><div class="footer-status"><span id="transport-state">Waiting for observations</span><br><span id="sample-state">No sample yet</span> · <span id="audio-window">0 received samples</span></div></footer>
+
+  <div id="scensheet" role="dialog" aria-modal="true" aria-label="Demonstration scenarios">
     <div class="inner">
-      <h3>Scenarios <span style="color:var(--sub);font-weight:400;font-size:11px">· tap outside to close · N = next day</span></h3>
+      <h3>Explore a demonstration</h3>
+      <p class="demo-caption">These scenarios use simulated data, not your brooder. Choose LIVE data to return. Escape or tap outside to close.</p>
       <div class="scengrid">
-        <div class="scen" data-s="COMFY"><span class="e">🌤</span>Comfy</div>
-        <div class="scen" data-s="COLD"><span class="e">🥶</span>Cold</div>
-        <div class="scen" data-s="HOT"><span class="e">🥵</span>Hot</div>
-        <div class="scen" data-s="DRAFT"><span class="e">💨</span>Draft</div>
+        <button class="scen" type="button" data-s="COMFY"><span class="e">01</span>Comfy</button>
+        <button class="scen" type="button" data-s="COLD"><span class="e">02</span>Cold</button>
+        <button class="scen" type="button" data-s="HOT"><span class="e">03</span>Hot</button>
+        <button class="scen" type="button" data-s="DRAFT"><span class="e">04</span>Draft</button>
       </div>
       <div class="scenrow2">
-        <div class="scen danger" data-s="CROWD"><span class="e">⚠️</span>Crowding</div>
-        <div class="scen danger" data-s="LAMPFAIL"><span class="e">🔌</span>Lamp fail</div>
-        <div class="scen danger" data-s="AMMONIA"><span class="e">☣️</span>NH₃ spike</div>
+        <button class="scen danger" type="button" data-s="CROWD"><span class="e">05</span>Crowding</button>
+        <button class="scen danger" type="button" data-s="LAMPFAIL"><span class="e">06</span>Lamp fail</button>
+        <button class="scen danger" type="button" data-s="AMMONIA"><span class="e">07</span>NH₃ spike</button>
       </div>
       <div class="scenrow2">
-        <div class="scen" data-s="AUTO"><span class="e">▶️</span>Auto cycle</div>
-        <div class="scen" data-s="LIVE"><span class="e">◉</span>LIVE data</div>
-        <div class="scen" data-s="DAY"><span class="e">📅</span>Next day</div>
+        <button class="scen" type="button" data-s="AUTO"><span class="e">08</span>Auto cycle</button>
+        <button class="scen" type="button" data-s="LIVE"><span class="e">09</span>LIVE data</button>
+        <button class="scen" type="button" data-s="DAY"><span class="e">10</span>Next day</button>
       </div>
     </div>
   </div>
 </div>
 
+<script src="pilot.js"></script>
+<script src="cloud-feed.js"></script>
 <script>
 p5.disableFriendlyErrors = true;
 
@@ -479,7 +527,7 @@ let sim = { t: 0, mode: 'manual', forced: 'LIVE', day: 1,
             crowdStreak: 0, crowdActive: false, crowdAlertAt: 0, crowdGrace: 0,
             stats: null };
 let DARKMODE = false;
-let camAng = -0.65, camElev = 0.42, camDist = 210;
+let camAng = -0.7, camElev = 0.72, camDist = 245;
 let dragging = false, lastX = 0, lastY = 0;
 
 // history + logs
@@ -530,6 +578,11 @@ function setup() {
   const w = document.getElementById('viewport');
   const cnv = createCanvas(w.clientWidth, w.clientHeight, WEBGL);
   cnv.parent('viewport');
+  cnv.id('p5canvas');
+  const placeholder = w.querySelector('canvas[aria-hidden="true"]');
+  if (placeholder && placeholder !== cnv.elt) placeholder.remove();
+  cnv.elt.setAttribute('aria-hidden', 'true');
+  frameRate(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 8 : 24);
   randomSeed(CONFIG.seed); noiseSeed(CONFIG.seed);
   pixelDensity(Math.min(2, window.devicePixelRatio || 1));
   setAttributes('antialias', true);
@@ -584,7 +637,7 @@ class Chick {
   }
   display() { drawChickBody(this.pos.x, this.pos.z, '#fffdf4', '#e8c99a'); }
 }
-function drawDot(x, z) { drawChickBody(x, z, '#d3f0b8', '#7fae55'); }
+function drawDot(x, z) { drawChickBody(x, z, '#f7d993', '#c88340'); }
 function drawChickBody(x, z, bodyCol, beakCol) {
   push();
   translate(x, -1.2, z);
@@ -600,6 +653,11 @@ function drawChickBody(x, z, bodyCol, beakCol) {
 // ================= SIMULATION (plan-aligned) =================
 function updateSim() {
   sim.t++;
+  // Camera/mic pilot must not manufacture thermal history or controller events.
+  if (sim.forced === 'LIVE') {
+    sim.stats = computeStatsPts(liveDots.map(d => [d.x, d.z]));
+    return;
+  }
   const prevClass = sim.classState, prevCrowd = sim.crowdActive, prevTrim = sim.trim;
 
   if (sim.mode === 'auto' && sim.forced !== 'LIVE') {
@@ -765,17 +823,17 @@ function computeStatsPts(pts) {
 function draw() {
   updateSim();
   updateUI();
-  if (DARKMODE) { background(18, 20, 14); ambientLight(80, 84, 66); }
-  else { background(216, 226, 196); ambientLight(170, 175, 150); }
+  background(41, 46, 39); ambientLight(155, 150, 125);
   directionalLight(255, 250, 240, -0.4, -1, -0.3);
   directionalLight(130, 140, 150, 0.5, -0.4, 0.4);
-  const cy = Math.sin(camElev) * camDist, ch = Math.cos(camElev) * camDist;
-  camera(Math.cos(camAng) * ch, -cy, Math.sin(camAng) * ch, 0, -35, 0, 0, 1, 0);
+  const viewDistance = camDist * Math.max(1, 1.8 * height / width);
+  const cy = Math.sin(camElev) * viewDistance, ch = Math.cos(camElev) * viewDistance;
+  camera(Math.cos(camAng) * ch, -cy, Math.sin(camAng) * ch, 0, -12, 0, 0, 1, 0);
   drawBrooder();
   const isLive = sim.forced === 'LIVE';
-  if (isLive) { for (const d of liveDots) drawDot(d.x, d.z); }
+  if (isLive) { if (window.pilotViewState(window.PILOT_SAMPLE).cameraLive) for (const d of liveDots) drawDot(d.x, d.z); }
   else { drawCrowdPulse(isLive); for (const c of chicks) c.display(); }
-  drawHeat();
+  if (!isLive) drawHeat();
 }
 
 function drawBrooder() {
@@ -809,7 +867,7 @@ function drawBrooder() {
     push();
     if (side === 1) rotateY(HALF_PI); else if (side === 2) rotateY(PI); else if (side === 3) rotateY(-HALF_PI);
     translate(0, 0, -half + 1.2);
-    fill(70, 105, 170, 60);
+    fill(172, 155, 109, 40);
     beginShape(TRIANGLE_STRIP);
     for (let i = 0; i <= 10; i++) {
       const x = -half + 3 + (F - 6) * i / 10;
@@ -822,7 +880,8 @@ function drawBrooder() {
   push(); translate(0, -52, 0); noStroke(); fill(45, 45, 52);
   cone(9, 7, 18, 4, false);
   translate(0, 6.2, 0);
-  fill(255, lerp(60, 200, sim.lampPWM), lerp(40, 90, sim.lampPWM));
+  if (sim.forced === 'LIVE') fill(110, 105, 87);
+  else fill(255, lerp(60, 200, sim.lampPWM), lerp(40, 90, sim.lampPWM));
   sphere(3.6, 12, 8); pop();
   stroke(70); strokeWeight(0.7); noFill(); line(0, -52, 0, 0, -CONFIG.camH + 1, 0);
 }
@@ -853,8 +912,9 @@ function drawHeat() {
 // ================= UI BINDING =================
 const $ = id => document.getElementById(id);
 function updateUI() {
+  if (sim.forced === 'LIVE') { window.renderPilot(); return; }
   const r = sim.stats || { nnd: 0, entropyN: 0, cellFrac: 0, clarkEvans: 1 };
-  const st = STATES[sim.classState];
+  const st = STATES[sim.classState] || STATES.COMFY;
   // banner
   $('sbstate').textContent = sim.crowdActive ? 'CROWDING ALARM' : st.name;
   $('sbstate').style.color = sim.crowdActive ? 'var(--red)' : st.ink;
@@ -909,6 +969,7 @@ function setScenario(s) {
   else { sim.mode = 'manual'; sim.forced = s; }
   if (s !== 'LIVE') { sim.crowdActive = false; sim.crowdStreak = 0; sim.crowdGrace = 0; }
   LOGS.log('info', 'scenario → ' + s);
+  window.setPilotMode(sim.forced === 'LIVE');
   updateScenActive();
   $('scensheet').classList.remove('open');
 }
@@ -918,20 +979,26 @@ function updateScenActive() {
     b.classList.toggle('active', b.dataset.s === active));
   const lbl = sim.forced === 'LIVE' ? 'LIVE tracking'
     : (sim.mode === 'auto' ? 'AUTO · ' : '') + (SCEN[sim.forced] ? SCEN[sim.forced].label : sim.forced);
-  $('vplabel').textContent = sim.forced === 'LIVE' ? '◉ LIVE · ' + (liveDots.length || '—') + ' chicks' : '🥚 ' + lbl;
+  if (sim.forced !== 'LIVE') $('vplabel').textContent = 'DEMO / ' + lbl;
 }
 document.querySelectorAll('.scen').forEach(b => b.addEventListener('click', () => setScenario(b.dataset.s)));
-$('btnscen').addEventListener('click', () => $('scensheet').classList.add('open'));
+$('btnscen').addEventListener('click', () => {
+  $('scensheet').classList.add('open');
+  $('scensheet').querySelector('.scen').focus();
+});
+$('scensheet').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { $('scensheet').classList.remove('open'); $('btnscen').focus(); }
+  if (e.key === 'Tab') {
+    const buttons = [...$('scensheet').querySelectorAll('.scen')];
+    if (e.shiftKey && document.activeElement === buttons[0]) { e.preventDefault(); buttons.at(-1).focus(); }
+    if (!e.shiftKey && document.activeElement === buttons.at(-1)) { e.preventDefault(); buttons[0].focus(); }
+  }
+});
 $('scensheet').addEventListener('click', e => { if (e.target.id === 'scensheet') $('scensheet').classList.remove('open'); });
 $('btndark').addEventListener('click', () => {
   DARKMODE = !DARKMODE;
-  document.documentElement.style.setProperty('--bg', DARKMODE ? '#12140e' : '#eaf8c2');
-  document.documentElement.style.setProperty('--bg2', DARKMODE ? '#1a1d13' : '#f8f8f0');
-  document.documentElement.style.setProperty('--card', DARKMODE ? '#232619' : '#ffffff');
-  document.documentElement.style.setProperty('--ink', DARKMODE ? '#e6ecc9' : '#2a2e24');
-  document.documentElement.style.setProperty('--sub', DARKMODE ? '#8f9578' : '#6f7561');
-  document.documentElement.style.setProperty('--card-edge', DARKMODE ? '#39402c' : '#dfe7e3');
-  $('btndark').textContent = DARKMODE ? '☀️' : '🌙';
+  document.documentElement.dataset.theme = DARKMODE ? 'dark' : 'light';
+  $('btndark').setAttribute('aria-pressed', String(DARKMODE));
   LOGS.log('info', (DARKMODE ? 'dark' : 'light') + ' mode');
 });
 $('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
@@ -955,9 +1022,14 @@ function ensureFeedImg() {
   return img;
 }
 $('btnfeed').addEventListener('click', () => {
+  if (!feedOn && !(window.BROKER && window.BROKER.feed_url)) {
+    $('observation-note').textContent = 'Live video is not configured. Camera-derived positions are still available; a separate stream server is needed for video.';
+    LOGS.log('info', 'video not configured — spatial view remains available');
+    return;
+  }
   feedOn = !feedOn;
   document.getElementById('viewport').classList.toggle('feeding', feedOn);
-  $('btnfeed').textContent = feedOn ? '🔵' : '🎥';
+  $('btnfeed').setAttribute('aria-pressed', String(feedOn));
   LOGS.log('info', feedOn ? 'view → live camera feed' : 'view → 3D tracking dots');
   if (feedOn) startFeed(); else stopFeed();
 });
@@ -1077,6 +1149,7 @@ document.querySelectorAll('.rangebar .rb').forEach(b => b.addEventListener('clic
 }));
 
 function histSeries() {
+  if (sim.forced === 'LIVE') return { labels: [], floorT: [], setpoint: [], states: [], times: [] };
   // remote: real rows from Supabase (RPC bucketed per range); sim: ring buffer
   if (HIST_REMOTE.series.length >= 2) {
     const S = HIST_REMOTE.series;
@@ -1119,6 +1192,15 @@ function renderHist() {
   const W = cv.width, H = cv.height, pad = 30;
   ctx.fillStyle = '#14170f'; ctx.fillRect(0, 0, W, H);
   const s = histSeries();
+  if (sim.forced === 'LIVE') {
+    ctx.fillStyle = '#e3dcc6'; ctx.font = '14px system-ui';
+    ctx.fillText('Thermal history waits for sensors.', 30, H / 2 - 8);
+    ctx.fillStyle = '#b7bba6'; ctx.font = '11px system-ui';
+    ctx.fillText('Camera and microphone observations remain live.', 30, H / 2 + 16);
+    $('histsum').textContent = 'No measured temperature data. Placeholder values are excluded.';
+    $('histread').textContent = 'Observation-only pilot · no thermal samples';
+    return;
+  }
   if (s.floorT.length < 2) {
     ctx.fillStyle = '#8f9578'; ctx.font = '13px system-ui';
     ctx.fillText('collecting data… run a scenario or connect LIVE', 70, H / 2);
@@ -1318,6 +1400,15 @@ function countEvents(kind) {
 }
 
 function renderAnalytics() {
+  $('csvbtn').disabled = sim.forced === 'LIVE';
+  if (sim.forced === 'LIVE') {
+    ['an-avg', 'an-min', 'an-max', 'an-comfy', 'an-trims', 'an-alarms', 'an-nh3', 'an-uptime',
+      'mm-acc', 'mm-f1', 'mm-recall', 'mm-resp', 'mm-stab'].forEach(id => { $(id).textContent = '—'; });
+    ['mm-acc-g', 'mm-f1-g', 'mm-recall-g', 'mm-resp-g', 'mm-stab-g'].forEach(id => { $(id).textContent = ''; });
+    $('dtbody').innerHTML = '<tr><td colspan="7">No measured thermal data. Sensors are not installed.</td></tr>';
+    $('mnote').textContent = 'Model accuracy, comfort classification and closed-loop performance are not validated in this camera/mic pilot. CSV thermal export is unavailable.';
+    return;
+  }
   const T = HIST.floorT, S = HIST.state;
   if (!T.length) { $('dtbody').innerHTML = '<tr><td colspan="7" style="color:var(--sub)">collecting…</td></tr>'; return; }
   const avg = T.reduce((a,b)=>a+b,0)/T.length;
@@ -1380,6 +1471,7 @@ function setMetric(vid, gid, val, kind) {
 }
 // ingestion: th-brain publishes {kind:"control_metrics", data:{accuracy,f1,crowd_recall,resp_s,stab_s,version}}
 window.ingestControlMetrics = function(m) {
+  if (sim.forced === 'LIVE') return;
   if (m.accuracy != null) setMetric('mm-acc', 'mm-acc-g', m.accuracy, 'acc');
   if (m.f1 != null) setMetric('mm-f1', 'mm-f1-g', m.f1, 'acc');
   if (m.crowd_recall != null) setMetric('mm-recall', 'mm-recall-g', m.crowd_recall, 'acc');
@@ -1399,6 +1491,7 @@ window.recordCtrlEvent = function(e) {
 };
 // CSV export of stored history
 $('csvbtn') && $('csvbtn').addEventListener('click', () => {
+  if (sim.forced === 'LIVE') return;
   const rows = [['t', 'floorT', 'setpoint', 'state']];
   HIST.floorT.forEach((t, i) => rows.push([
     (HIST.t[i] ? new Date(HIST.t[i]).toISOString() : i), t, HIST.setpoint[i], HIST.state[i]
@@ -1416,6 +1509,10 @@ function renderLogs() {
     || '<div class="logline">no events yet</div>';
 }
 function renderWarn() {
+  if (sim.forced === 'LIVE') {
+    $('warnbody').innerHTML = '<div class="logline">Welfare alerts are not validated in this pilot. Check camera and microphone observations directly; no thermal protection is provided.</div>';
+    return;
+  }
   if (HIST_REMOTE.events.length) {
     $('warnbody').innerHTML = HIST_REMOTE.events.map((e, i) => ({ e, i })).reverse().slice(0, 60).map(({ e, i }) =>
       `<div class="logline warn clickable" data-ev="${i}"><span class="t">${new Date(e.ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>` +
@@ -1428,9 +1525,9 @@ function renderWarn() {
 }
 
 // ================= LIVE DATA (MQTT + JSON) =================
-window.setChickPositions = function(arr) {
+window.setChickPositions = function(arr, centered = false) {
   arr = arr || [];
-  const cornerFormat = arr.some(p => p[0] > 50 || p[1] > 50);
+  const cornerFormat = !centered && arr.some(p => p[0] > 50 || p[1] > 50);
   liveDots = arr.map(p => {
     let x = parseFloat(p[0]), z = parseFloat(p[1]);
     if (cornerFormat) { x -= 50; z -= 50; }
@@ -1441,8 +1538,11 @@ window.setChickPositions = function(arr) {
 };
 function ingestTrackingJSON(txt) {
   const d = JSON.parse(txt);
+  if (window.PILOT_SAMPLE && Number.isFinite(d.ts) && d.ts < window.PILOT_SAMPLE.ts) return;
+  window.ingestPilotSample(d);
+  if (sim.forced !== 'LIVE') return;
   const arr = d.chicks || d.positions || d;
-  if (Array.isArray(arr) && Array.isArray(arr[0])) window.setChickPositions(arr);
+  if (Array.isArray(arr) && (!arr.length || Array.isArray(arr[0]))) window.setChickPositions(arr, 'cam_ok' in d);
   if (isFinite(d.baseline)) sim.baseline = d.baseline;
   if (isFinite(d.trim)) sim.trim = d.trim;
   if (isFinite(d.day)) sim.day = d.day;
@@ -1462,10 +1562,11 @@ function ingestTrackingJSON(txt) {
   updateScenActive();
 }
 setInterval(() => {
-  if (sim.forced !== 'LIVE' || window.__mqttLive) return;
+  if (document.hidden || sim.forced !== 'LIVE' || (window.__mqttLive && window.pilotViewState(window.PILOT_SAMPLE).fresh)) return;
+  if (location.protocol === 'https:') { window.pollCloudObservation(); return; }
   fetch('tracking_latest.json', { cache: 'no-store' })
     .then(r => { if (r.ok) return r.text(); throw 0; })
-    .then(ingestTrackingJSON).catch(() => {});
+    .then(txt => { ingestTrackingJSON(txt); window.__pilotSource = 'local'; }).catch(() => {});
 }, 2000);
 
 // MQTT
@@ -1481,7 +1582,7 @@ window.connectMQTT = function(url, opts) {
   client.on('connect', () => {
     topics.forEach(t => client.subscribe(t));
     window.__mqttLive = true;
-    chip.textContent = '⚡ live'; chip.className = 'on'; chip.title = 'connected ' + url;
+    chip.textContent = 'MQTT connected'; chip.className = 'on'; chip.title = 'Click to disconnect MQTT';
   });
   client.on('message', (t, payload) => {
     try {
@@ -1496,16 +1597,17 @@ window.connectMQTT = function(url, opts) {
       } else if (!t.endsWith('status')) ingestTrackingJSON(payload.toString());
     } catch (e) { console.warn('[mqtt] bad payload'); }
   });
-  client.on('error', () => { window.__mqttLive = false; chip.textContent = '⚡ error'; chip.className = 'err'; });
-  client.on('close', () => { window.__mqttLive = false; chip.textContent = '⚡ offline'; chip.className = ''; });
+  client.on('error', () => { window.__mqttLive = false; chip.textContent = 'MQTT error'; chip.className = 'err'; });
+  client.on('close', () => { window.__mqttLive = false; chip.textContent = 'Connect MQTT'; chip.className = ''; });
   window.__mqttClient = client;
   if (sim.forced !== 'LIVE') setScenario('LIVE');
 };
 $('connchip').addEventListener('click', () => {
+  if (location.protocol === 'https:') { window.pollCloudObservation(); return; }
   if (window.__mqttClient && window.__mqttLive) {
     window.__mqttClient.end(true);
     window.__mqttClient = null; window.__mqttLive = false;
-    $('connchip').textContent = '⚡ offline'; $('connchip').className = '';
+    $('connchip').textContent = 'Connect MQTT'; $('connchip').className = '';
     return;
   }
   fetch('broker.js', { cache: 'no-store' })

@@ -1,0 +1,43 @@
+{
+  "checks": {
+    "state": {
+      "passed": 11,
+      "message": "Fresh, stale, failed, empty and invalid-input states passed"
+    },
+    "ui": {
+      "passed": 9,
+      "message": "Live-only history, export, analytics, controls, canvas and layout checks passed"
+    }
+  },
+  "live": {
+    "mqtt": true,
+    "fresh": true,
+    "transport": "Cloud MQTT \u00b7 receiving"
+  },
+  "layouts": [
+    {
+      "width": 375,
+      "overflow": false,
+      "sceneFits": true,
+      "touchTargets": true
+    },
+    {
+      "width": 768,
+      "overflow": false,
+      "sceneFits": true,
+      "touchTargets": true
+    },
+    {
+      "width": 1024,
+      "overflow": false,
+      "sceneFits": true,
+      "touchTargets": true
+    },
+    {
+      "width": 1440,
+      "overflow": false,
+      "sceneFits": true,
+      "touchTargets": true
+    }
+  ]
+}

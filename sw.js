@@ -1,7 +1,10 @@
-/* ThermoHuddle service worker — offline app shell (v9: remote history + canvas fit) */
-const CACHE = 'thermohuddle-v9';
+/* ThermoHuddle service worker — offline app shell (v12: public cloud observations). */
+const CACHE = 'thermohuddle-v12';
 const ASSETS = [
   './index.html',
+  './brooder.css',
+  './pilot.js',
+  './cloud-feed.js',
   './p5.min.js',
   './mqtt.min.js',
   './manifest.json',
@@ -71,7 +74,7 @@ self.addEventListener('fetch', (e) => {
         })
     ).catch(() => {
       if (e.request.mode === 'navigate') {
-        return caches.match('./brooder_tracker.html').then(
+        return caches.match('./index.html').then(
           (shell) => shell || Response.error()
         );
       }
