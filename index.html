@@ -171,7 +171,28 @@
   #whycard .why-b { font-size: 11px; color: var(--sub); line-height: 1.55; margin-top: 2px; }
 
   /* history chart */
-  #histpage canvas { width: 100%; border-radius: 14px; background: #14170f; }
+  #page-hist canvas { display: block; width: 100%; max-width: 100%; border-radius: 14px; background: #14170f; }
+
+  /* event modal + scrub readout (remote history) */
+  #evmodal { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 60;
+    display: none; align-items: center; justify-content: center; padding: 16px; }
+  #evmodal.open { display: flex; }
+  #evcard { background: var(--card); border: 1px solid var(--card-edge); border-radius: 16px;
+    max-width: 420px; width: 100%; max-height: 86vh; overflow: auto; padding: 14px; }
+  #evcard h3 { margin: 0 0 6px; font-size: 14px; }
+  #evcard .evchips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  #evcard .evchip { font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
+    background: var(--green-soft); color: #3c5a1e; font-weight: 700; }
+  #evcard .evchip.warn { background: var(--red-soft); color: var(--red); }
+  #evcard img { width: 100%; border-radius: 10px; margin: 4px 0; background: #14170f; }
+  #evcard .evgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11.5px; margin: 8px 0; }
+  #evcard .evgrid b { font-weight: 700; }
+  #evcard .evlbl { color: var(--sub); font-size: 10.5px; }
+  #evcard .evclose { margin-top: 8px; width: 100%; padding: 8px; border-radius: 10px;
+    border: 1px solid var(--card-edge); background: transparent; color: inherit; font-weight: 700; }
+  .histread { font-size: 11px; color: var(--sub); margin-top: 6px; min-height: 15px;
+    font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+  .logline.warn.clickable { cursor: pointer; }
 
   /* logs */
   .logline {
@@ -662,10 +683,10 @@ function updateSim() {
   if (sim.t % 120 === 0) {
     const open = document.querySelector('.navbtn.active');
     if (open) {
-      if (open.dataset.p === 'hist') renderHist();
+      if (open.dataset.p === 'hist') { renderHist(); loadHistRemote(); }
       else if (open.dataset.p === 'analytics') renderAnalytics();
       else if (open.dataset.p === 'logs') renderLogs();
-      else if (open.dataset.p === 'warn') renderWarn();
+      else if (open.dataset.p === 'warn') { renderWarn(); loadHistRemote(); }
     }
   }
 }
@@ -875,6 +896,7 @@ document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', ()
   document.querySelectorAll('.navbtn').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + b.dataset.p));
   if (b.dataset.p === 'hist') renderHist();
+  if (b.dataset.p === 'hist' || b.dataset.p === 'warn') loadHistRemote();
   if (b.dataset.p === 'analytics') renderAnalytics();
   if (b.dataset.p === 'logs') renderLogs();
   if (b.dataset.p === 'warn') renderWarn();
@@ -1051,9 +1073,26 @@ document.querySelectorAll('.rangebar .rb').forEach(b => b.addEventListener('clic
   document.querySelectorAll('.rangebar .rb').forEach(x => x.classList.toggle('on', x === b));
   histRange = b.dataset.r;
   renderHist();
+  loadHistRemote();
 }));
 
 function histSeries() {
+  // remote: real rows from Supabase (RPC bucketed per range); sim: ring buffer
+  if (HIST_REMOTE.series.length >= 2) {
+    const S = HIST_REMOTE.series;
+    const labelFmt = (row) => {
+      const dt = new Date(row.ts);
+      if (histRange === '24h') return dt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: false });
+      return dt.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+    };
+    return {
+      labels: S.map(labelFmt),
+      floorT: S.map(r => r.floor_avg),
+      setpoint: S.map(r => r.setpoint_avg),
+      states: S.map(r => r.state),
+      times: S.map(r => +new Date(r.ts)),
+    };
+  }
   // sim: stretch the ring buffer over the window; live: real timestamps when
   // the Pi syncs (ts array kept alongside samples)
   const n = HIST.floorT.length;
@@ -1071,6 +1110,7 @@ function histSeries() {
     floorT: HIST.floorT.slice(),
     setpoint: HIST.setpoint.slice(),
     states: HIST.state.slice(),
+    times: HIST.t.slice(),
   };
 }
 
@@ -1113,6 +1153,22 @@ function renderHist() {
   ctx.strokeStyle = '#ff7b3d'; ctx.lineWidth = 2; ctx.beginPath();
   s.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
   ctx.stroke();
+  // warning/event markers + scrub layout (remote history)
+  HIST_LAYOUT = { x0, x1, y0, y1, times: s.times || null, N, markerPts: [] };
+  if (s.times && HIST_REMOTE.events.length) {
+    const tt0 = s.times[0], tt1 = s.times[s.times.length - 1];
+    HIST_REMOTE.events.forEach(ev => {
+      const ts = +new Date(ev.ts);
+      if (ts < tt0 || ts > tt1) return;
+      const fi = (ts - tt0) / (tt1 - tt0) * (N - 1);
+      const mx = X(fi);
+      HIST_LAYOUT.markerPts.push({ x: mx, ev });
+      ctx.fillStyle = ev.kind === 'crowding' ? '#dc0014' : ev.kind === 'lamp_fail' ? '#e6a700' : '#c257e0';
+      ctx.beginPath();
+      ctx.moveTo(mx, y1 + 3); ctx.lineTo(mx - 5, y1 + 12); ctx.lineTo(mx + 5, y1 + 12);
+      ctx.closePath(); ctx.fill();
+    });
+  }
   // summary chips
   const avg = s.floorT.reduce((a, b) => a + b, 0) / N;
   const comfy = s.states.filter(x => x === 'COMFY').length / N;
@@ -1122,6 +1178,135 @@ function renderHist() {
     `<span class="hchip">min <b>${Math.min(...s.floorT).toFixed(1)}°</b> · max <b>${Math.max(...s.floorT).toFixed(1)}°</b></span>` +
     `<span class="hchip">comfy <b>${Math.round(comfy*100)}%</b></span>`;
 }
+
+// ================= REMOTE HISTORY (Supabase) =================
+// drag the chart to read the state at that time; click a warning marker (or a
+// line in Warnings) to open the captured frame + sensor snapshot for that moment.
+let HIST_LAYOUT = null;
+const HIST_REMOTE = { series: [], events: [], fetchedAt: 0, loading: false, err: '' };
+
+function sbReady() { return !!(window.SUPABASE && window.SUPABASE.url && window.SUPABASE.anon); }
+function sbGet(path) {
+  const { url, anon } = window.SUPABASE;
+  return fetch(url + '/rest/v1/' + path, {
+    headers: { apikey: anon, Authorization: 'Bearer ' + anon, Accept: 'application/json' },
+  }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+}
+function loadHistRemote(force) {
+  if (!sbReady() || HIST_REMOTE.loading) return;
+  if (!force && Date.now() - HIST_REMOTE.fetchedAt < 45000) return;
+  HIST_REMOTE.loading = true;
+  const rangeSec = RANGE_MS[histRange] / 1000;
+  // Supabase caps REST responses at 1000 rows — pick buckets that stay under it
+  const bucket = rangeSec <= 86400 ? 90 : rangeSec <= 604800 ? 630 : 2700;
+  const from = new Date(Date.now() - RANGE_MS[histRange]).toISOString();
+  const readout = $('histread');
+  Promise.all([
+    sbGet(`rpc/get_history?from_ts=${encodeURIComponent(from)}&bucket_seconds=${bucket}`),
+    sbGet(`control_events?select=*&ts=gte.${encodeURIComponent(from)}&order=ts.asc&limit=300`),
+  ]).then(([series, events]) => {
+    HIST_REMOTE.series = series || [];
+    HIST_REMOTE.events = events || [];
+    HIST_REMOTE.fetchedAt = Date.now();
+    HIST_REMOTE.err = HIST_REMOTE.series.length ? '' : 'no rows yet';
+    renderHist(); renderWarn();
+  }).catch(err => {
+    HIST_REMOTE.err = String(err.message || err);
+    if (readout) readout.textContent = 'history source offline (' + HIST_REMOTE.err + ')';
+  }).finally(() => { HIST_REMOTE.loading = false; });
+}
+(function histScrub() {
+  const cv = $('histcanvas'); if (!cv) return;
+  const hs = $('histsum');
+  if (hs && !document.getElementById('histread'))
+    hs.insertAdjacentHTML('afterend', '<div class="histread" id="histread"></div>');
+  const findIdx = (clientX) => {
+    if (!HIST_LAYOUT || !HIST_LAYOUT.times) return -1;
+    const r = cv.getBoundingClientRect();
+    const x = (clientX - r.left) * (cv.width / r.width);
+    const { x0, x1, times } = HIST_LAYOUT;
+    if (x < x0 - 4 || x > x1 + 4) return -1;
+    const f = Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+    return Math.round(f * (times.length - 1));
+  };
+  const showReadout = (i) => {
+    const el = $('histread'); if (!el) return;
+    const row = HIST_REMOTE.series[i]; if (!row) return;
+    const when = new Date(row.ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    const c = STATE_COLORS[row.state] || '#555';
+    el.innerHTML = `${when} · <span style="color:${c};font-weight:700">${row.state}</span>` +
+      ` · floor ${(+row.floor_avg).toFixed(1)}°C · sp ${(+row.setpoint_avg).toFixed(1)}°C` +
+      ` · NH₃ ${(+row.nh3_avg).toFixed(1)}ppm · ${row.samples} samples`;
+  };
+  const clearReadout = () => { const el = $('histread'); if (el) el.textContent = ''; };
+  cv.addEventListener('pointermove', (e) => {
+    const i = findIdx(e.clientX);
+    if (i >= 0) showReadout(i); else if (!e.buttons) clearReadout();
+  });
+  cv.addEventListener('pointerleave', clearReadout);
+  cv.addEventListener('click', (e) => {
+    if (HIST_LAYOUT) {
+      const r = cv.getBoundingClientRect();
+      const x = (e.clientX - r.left) * (cv.width / r.width);
+      const hit = HIST_LAYOUT.markerPts.find(m => Math.abs(m.x - x) <= 9);
+      if (hit) { openEvModal(hit.ev); return; }
+    }
+    const i = findIdx(e.clientX);
+    if (i >= 0) showReadout(i);
+  });
+})();
+function openEvModal(ev) {
+  let m = document.getElementById('evmodal');
+  if (!m) {
+    m = document.createElement('div'); m.id = 'evmodal';
+    m.innerHTML = '<div id="evcard"></div>';
+    m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('open'); });
+    document.body.appendChild(m);
+  }
+  const card = document.getElementById('evcard');
+  const when = new Date(ev.ts).toLocaleString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const f1 = (a, b, u) => (a == null && b == null) ? '—' : `${a == null ? '·' : a} → ${b == null ? '·' : b}${u || ''}`;
+  const fS = (v) => v == null ? '—' : (v < 600 ? Math.round(v) + 's' : (v / 60).toFixed(1) + 'm');
+  card.innerHTML =
+    `<h3>${ev.kind || 'event'}</h3>` +
+    `<div class="evchips"><span class="evchip warn">${ev.state || ''}</span>` +
+    `<span class="evchip">${when}</span><span class="evchip">run ${ev.run_id || '—'}</span></div>` +
+    `<div class="evgrid" id="evgrid">` +
+    `<div><span class="evlbl">trim</span><br><b>${f1(ev.trim_before, ev.trim_after, '°C')}</b></div>` +
+    `<div><span class="evlbl">lamp duty</span><br><b>${f1(ev.duty_before, ev.duty_after)}</b></div>` +
+    `<div><span class="evlbl">response</span><br><b>${fS(ev.resp_s)}</b></div>` +
+    `<div><span class="evlbl">stabilized</span><br><b>${fS(ev.stab_s)}</b></div>` +
+    `<div style="grid-column:1/3"><span class="evlbl">outcome</span><br><b>${ev.outcome || '—'}</b></div>` +
+    `</div>` +
+    (ev.img_before ? `<img src="${ev.img_before}" alt="frame at event">` : '<div class="evlbl" style="margin:6px 0">no frame captured for this event</div>') +
+    (ev.img_after ? `<div class="evlbl">after recovery:</div><img src="${ev.img_after}" alt="frame after recovery">` : '');
+  m.classList.add('open');
+  // live sensor snapshot at that moment (nearest telemetry row)
+  if (sbReady()) {
+    const t = new Date(ev.ts);
+    const lo = new Date(t.getTime() - 45000).toISOString();
+    const hi = new Date(t.getTime() + 45000).toISOString();
+    sbGet(`telemetry_raw?select=ts,temp_floor_avg,temp_air,humidity,nh3_ppm,lamp_duty,setpoint,day&ts=gte.${encodeURIComponent(lo)}&ts=lte.${encodeURIComponent(hi)}&order=ts.asc&limit=8`)
+      .then(rows => {
+        if (!rows || !rows.length) return;
+        const tE = +new Date(ev.ts);
+        let best = null, bd = Infinity;
+        rows.forEach(r => { const d = Math.abs(+new Date(r.ts) - tE); if (d < bd) { bd = d; best = r; } });
+        if (!best) return;
+        const g = document.getElementById('evgrid');
+        if (!g) return;
+        g.insertAdjacentHTML('beforeend',
+          `<div style="grid-column:1/3;border-top:1px solid var(--card-edge);padding-top:6px;margin-top:2px">` +
+          `<span class="evlbl">sensors at that moment (day ${best.day}):</span><br>` +
+          `<b>floor ${(+best.temp_floor_avg).toFixed(1)}°C · air ${(+best.temp_air).toFixed(1)}°C · RH ${(+best.humidity).toFixed(0)}% · NH₃ ${(+best.nh3_ppm).toFixed(1)}ppm · duty ${(+best.lamp_duty).toFixed(2)} · sp ${(+best.setpoint).toFixed(1)}°C</b></div>`);
+      }).catch(() => {});
+  }
+}
+// Warnings page: render remote events when available, clickable → modal
+document.getElementById('warnbody') && document.getElementById('warnbody').addEventListener('click', (e) => {
+  const line = e.target.closest('[data-ev]');
+  if (line && HIST_REMOTE.events[+line.dataset.ev]) openEvModal(HIST_REMOTE.events[+line.dataset.ev]);
+});
 
 // ================= ANALYTICS =================
 function countEvents(kind) {
@@ -1231,6 +1416,12 @@ function renderLogs() {
     || '<div class="logline">no events yet</div>';
 }
 function renderWarn() {
+  if (HIST_REMOTE.events.length) {
+    $('warnbody').innerHTML = HIST_REMOTE.events.map((e, i) => ({ e, i })).reverse().slice(0, 60).map(({ e, i }) =>
+      `<div class="logline warn clickable" data-ev="${i}"><span class="t">${new Date(e.ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>` +
+      `${e.kind}${e.outcome ? ' — ' + e.outcome : ''}${e.img_before ? ' 📷' : ''}</div>`).join('');
+    return;
+  }
   $('warnbody').innerHTML = LOGS.warn.slice().reverse().slice(0, 60).map(e =>
     `<div class="logline warn"><span class="t">${e.t.toLocaleTimeString()}</span>${e.msg}</div>`).join('')
     || '<div class="logline">no warnings — all clear ✓</div>';
@@ -1353,6 +1544,11 @@ if ('serviceWorker' in navigator) {
 // register service worker so the app works offline + installs as PWA
 // (sw.js also caches index + libs)
 
+// remote history (Supabase) — config arrives same-origin, like broker.js
+fetch('supabase.js', { cache: 'no-store' })
+  .then(r => { if (!r.ok) throw 0; return r.text(); })
+  .then(txt => { (0, eval)(txt); loadHistRemote(true); })
+  .catch(() => console.warn('[hist] no supabase.js — history stays sim-only'));
 LOGS.log('info', 'ThermoHuddle mobile app started');
 </script>
 </body>

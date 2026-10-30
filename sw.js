@@ -1,5 +1,5 @@
-/* ThermoHuddle service worker — offline app shell (v7: cross-modal confidence) */
-const CACHE = 'thermohuddle-v7';
+/* ThermoHuddle service worker — offline app shell (v9: remote history + canvas fit) */
+const CACHE = 'thermohuddle-v9';
 const ASSETS = [
   './index.html',
   './p5.min.js',
@@ -32,6 +32,19 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;           // let anything remote pass through
 
   // LIVE tracking data: always prefer the network, fall back to last known
+  if (url.pathname.endsWith('supabase.js')) {
+    e.respondWith(
+      fetch(e.request)
+        .then((r) => {
+          const cp = r.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, cp));
+          return r;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
   if (url.pathname.endsWith('tracking_latest.json')) {
     e.respondWith(
       fetch(e.request)
