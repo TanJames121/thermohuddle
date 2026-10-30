@@ -16,11 +16,11 @@ window.runPilotUiChecks = function () {
   check(HIST.floorT.length === before, 'Live observation must not generate thermal samples');
   const controls = [...document.querySelectorAll('.control-metric, .legacy-controls')];
   check(controls.every(e => getComputedStyle(e).display === 'none'), 'Placeholder controls must stay hidden');
-  const savedDots = liveDots;
+  const savedDots = liveDots, savedStats = sim.stats;
   try {
     window.setChickPositions([[60, 0], [-15, 5]], true);
     check(liveDots[0].x === 60 && liveDots[1].x === -15, 'Centered Pi coordinates must not be shifted by corner-format detection');
-  } finally { liveDots = savedDots; }
+  } finally { liveDots = savedDots; sim.stats = savedStats; }
   check(document.querySelectorAll('#p5canvas').length === 1, 'Only one scene canvas may have p5canvas ID');
   check(document.documentElement.scrollWidth <= innerWidth, 'Dashboard must not overflow horizontally');
   return { passed: 9, message: 'Live-only history, export, analytics, controls, canvas and layout checks passed' };

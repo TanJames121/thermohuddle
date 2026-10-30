@@ -1,4 +1,10 @@
 /* Regression fixtures only. These tests never publish or upload telemetry. */
+window.checkPilotFrameWork = function () {
+  const saved = sim.stats;
+  updateSim();
+  if (sim.stats !== saved) throw new Error('LIVE frames recomputed unchanged spatial statistics');
+  return true;
+};
 window.checkPilotModeTransition = function () {
   const saved = { ...HIST };
   try {

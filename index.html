@@ -637,7 +637,10 @@ class Chick {
   }
   display() { drawChickBody(this.pos.x, this.pos.z, '#fffdf4', '#e8c99a'); }
 }
-function drawDot(x, z) { drawChickBody(x, z, '#f7d993', '#c88340'); }
+function drawDot(x, z) {
+  push(); translate(x, -2.5, z); noStroke(); fill('#f7d993');
+  sphere(1.1, 5, 3); pop();
+}
 function drawChickBody(x, z, bodyCol, beakCol) {
   push();
   translate(x, -1.2, z);
@@ -654,10 +657,7 @@ function drawChickBody(x, z, bodyCol, beakCol) {
 function updateSim() {
   sim.t++;
   // Camera/mic pilot must not manufacture thermal history or controller events.
-  if (sim.forced === 'LIVE') {
-    sim.stats = computeStatsPts(liveDots.map(d => [d.x, d.z]));
-    return;
-  }
+  if (sim.forced === 'LIVE') return;
   const prevClass = sim.classState, prevCrowd = sim.crowdActive, prevTrim = sim.trim;
 
   if (sim.mode === 'auto' && sim.forced !== 'LIVE') {
@@ -1539,6 +1539,7 @@ window.setChickPositions = function(arr, centered = false) {
     if (cornerFormat) { x -= 50; z -= 50; }
     return { x, z };
   }).filter(p => isFinite(p.x) && isFinite(p.z));
+  sim.stats = computeStatsPts(liveDots.map(d => [d.x, d.z]));
   liveFresh = liveDots.length > 0;
   if (sim.forced !== 'LIVE') setScenario('LIVE');
 };
