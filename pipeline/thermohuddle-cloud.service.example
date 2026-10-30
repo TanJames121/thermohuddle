@@ -1,0 +1,22 @@
+[Unit]
+Description=ThermoHuddle public camera/mic snapshot bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Private config may contain shell-style 'export'; never hand it to systemd,
+# whose invalid-assignment diagnostics could disclose the assignment value.
+RuntimeDirectory=thermohuddle-cloud
+RuntimeDirectoryMode=0700
+EnvironmentFile=-%t/thermohuddle-cloud/supabase.env
+ExecStartPre=/usr/bin/python3 /home/tanverse_2026/Thermohuddle/pipeline/cloud_snapshot_bridge.py --prepare-env %t/thermohuddle-cloud/supabase.env
+ExecStart=/usr/bin/python3 /home/tanverse_2026/Thermohuddle/pipeline/cloud_snapshot_bridge.py --source /home/tanverse_2026/Thesis/tracking_latest.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+LimitCORE=0
+
+[Install]
+WantedBy=default.target

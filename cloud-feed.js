@@ -2,6 +2,10 @@
 window.PILOT_CLOUD_URL = 'https://thoissoyiupjrrsqmika.supabase.co/storage/v1/object/public/frames/telemetry/latest.json';
 window.cloudShouldPoll = (hidden, live, mqttFresh) => !hidden && live && !mqttFresh;
 let cloudInFlight = false;
+if (location.protocol === 'https:') {
+  document.getElementById('connchip').textContent = 'Connecting to cloud';
+  document.getElementById('connchip').title = 'Automatic read-only cloud observations';
+}
 
 window.pollCloudObservation = async function () {
   const mqttFresh = window.__mqttLive && window.pilotViewState(window.PILOT_SAMPLE).fresh;

@@ -1,5 +1,5 @@
-/* ThermoHuddle service worker — offline app shell (v12: public cloud observations). */
-const CACHE = 'thermohuddle-v12';
+/* ThermoHuddle service worker — offline app shell (v13: safe live/demo transitions). */
+const CACHE = 'thermohuddle-v13';
 const ASSETS = [
   './index.html',
   './brooder.css',

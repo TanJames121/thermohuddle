@@ -970,6 +970,8 @@ function setScenario(s) {
   if (s !== 'LIVE') { sim.crowdActive = false; sim.crowdStreak = 0; sim.crowdGrace = 0; }
   LOGS.log('info', 'scenario → ' + s);
   window.setPilotMode(sim.forced === 'LIVE');
+  renderHist(); renderAnalytics(); renderWarn();
+  if (sim.forced === 'LIVE' && $('evmodal')) $('evmodal').classList.remove('open');
   updateScenActive();
   $('scensheet').classList.remove('open');
 }
@@ -1193,6 +1195,7 @@ function renderHist() {
   ctx.fillStyle = '#14170f'; ctx.fillRect(0, 0, W, H);
   const s = histSeries();
   if (sim.forced === 'LIVE') {
+    HIST_LAYOUT = null;
     ctx.fillStyle = '#e3dcc6'; ctx.font = '14px system-ui';
     ctx.fillText('Thermal history waits for sensors.', 30, H / 2 - 8);
     ctx.fillStyle = '#b7bba6'; ctx.font = '11px system-ui';
@@ -1303,7 +1306,7 @@ function loadHistRemote(force) {
   if (hs && !document.getElementById('histread'))
     hs.insertAdjacentHTML('afterend', '<div class="histread" id="histread"></div>');
   const findIdx = (clientX) => {
-    if (!HIST_LAYOUT || !HIST_LAYOUT.times) return -1;
+    if (sim.forced === 'LIVE' || !HIST_LAYOUT || !HIST_LAYOUT.times) return -1;
     const r = cv.getBoundingClientRect();
     const x = (clientX - r.left) * (cv.width / r.width);
     const { x0, x1, times } = HIST_LAYOUT;
@@ -1312,6 +1315,7 @@ function loadHistRemote(force) {
     return Math.round(f * (times.length - 1));
   };
   const showReadout = (i) => {
+    if (sim.forced === 'LIVE') return;
     const el = $('histread'); if (!el) return;
     const row = HIST_REMOTE.series[i]; if (!row) return;
     const when = new Date(row.ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -1320,13 +1324,14 @@ function loadHistRemote(force) {
       ` · floor ${(+row.floor_avg).toFixed(1)}°C · sp ${(+row.setpoint_avg).toFixed(1)}°C` +
       ` · NH₃ ${(+row.nh3_avg).toFixed(1)}ppm · ${row.samples} samples`;
   };
-  const clearReadout = () => { const el = $('histread'); if (el) el.textContent = ''; };
+  const clearReadout = () => { if (sim.forced === 'LIVE') return; const el = $('histread'); if (el) el.textContent = ''; };
   cv.addEventListener('pointermove', (e) => {
     const i = findIdx(e.clientX);
     if (i >= 0) showReadout(i); else if (!e.buttons) clearReadout();
   });
   cv.addEventListener('pointerleave', clearReadout);
   cv.addEventListener('click', (e) => {
+    if (sim.forced === 'LIVE') return;
     if (HIST_LAYOUT) {
       const r = cv.getBoundingClientRect();
       const x = (e.clientX - r.left) * (cv.width / r.width);
@@ -1338,6 +1343,7 @@ function loadHistRemote(force) {
   });
 })();
 function openEvModal(ev) {
+  if (sim.forced === 'LIVE') return;
   let m = document.getElementById('evmodal');
   if (!m) {
     m = document.createElement('div'); m.id = 'evmodal';
@@ -1538,6 +1544,7 @@ window.setChickPositions = function(arr, centered = false) {
 };
 function ingestTrackingJSON(txt) {
   const d = JSON.parse(txt);
+  if ('cam_ok' in d && (!Number.isFinite(d.ts) || d.ts * 1000 > Date.now() + 5000)) return;
   if (window.PILOT_SAMPLE && Number.isFinite(d.ts) && d.ts < window.PILOT_SAMPLE.ts) return;
   window.ingestPilotSample(d);
   if (sim.forced !== 'LIVE') return;

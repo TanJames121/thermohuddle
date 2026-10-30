@@ -31,6 +31,14 @@ Or run locally: double-click `start_app.bat` (Windows) / `bash start_app.sh` (Pi
 | `pipeline/thermohuddle_draft_v2.py` | Pi pipeline draft: detection → spatial features → classification → trim manager → PID → telemetry. Modes: `--simulate`, `--replay`, `--camera` |
 | `pipeline/test_broker_ws.py` | Test MQTT broker simulating Pi telemetry — demo the whole remote-monitoring story with zero hardware (`python pipeline/test_broker_ws.py`, needs `pip install amqtt`) |
 
+## Public camera/microphone uplink
+
+`pipeline/cloud_snapshot_bridge.py` reads the running Pi pipeline snapshot and uploads only allowlisted positions, count, camera availability and microphone measurements. The public object is overwritten, not appended. Source timestamps remain unchanged; old samples are never relabeled as fresh. The browser checks every2s while visible; the source currently reports about every10s.
+
+The installed user service is `thermohuddle-cloud.service` (see `pipeline/thermohuddle-cloud.service.example`). It reads private Supabase write credentials from the Pi configuration, never from GitHub. Check it with `systemctl --user status thermohuddle-cloud.service`. Both this bridge and the camera/mic pipeline must be running. An enabled bridge cannot produce new observations if the source pipeline is stopped.
+
+This is a public dashboard: sanitized motion positions and microphone levels are visible to anyone with the URL. No raw microphone recording, camera video, thermal placeholders or write credentials are uploaded.
+
 ## Architecture (summary)
 
 Five services on the Pi: `th-sensord` (safety-critical control, no AI imports) · `th-visiond` · `th-audiod` · `th-brain` (fusion + bounded trim) · `th-uplink` (MQTT/SQLite/Supabase).

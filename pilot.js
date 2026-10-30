@@ -21,7 +21,7 @@ window.PILOT_SAMPLE = null;
 window.PILOT_AUDIO = [];
 let pilotLastKey = '', pilotLastPaint = 0;
 window.ingestPilotSample = function (sample) {
-  if (!sample || !Number.isFinite(sample.ts) || !('cam_ok' in sample)) return;
+  if (!sample || !Number.isFinite(sample.ts) || sample.ts * 1000 > Date.now() + 5000 || !('cam_ok' in sample)) return;
   // Older packets and retained messages must not overwrite newer observations.
   if (window.PILOT_SAMPLE && sample.ts < window.PILOT_SAMPLE.ts) return;
   window.PILOT_SAMPLE = sample;
@@ -54,7 +54,7 @@ window.renderPilot = function () {
   const dot = document.getElementById('sbdot');
   dot.style.background = navigator.onLine && view.cameraLive && view.micLive ? 'var(--green)' : 'var(--amber)';
   dot.style.boxShadow = '0 0 0 4px #60734b18';
-  put('sbsub', !navigator.onLine ? 'Cached observation only. Reconnect for live updates.' : view.fresh ? 'Observation only. Thermal sensing comes next.' : 'No fresh telemetry. Check the Pi or connect MQTT.');
+  put('sbsub', !navigator.onLine ? 'Cached observation only. Reconnect for live updates.' : view.fresh ? 'Observation only. Thermal sensing comes next.' : location.protocol === 'https:' ? 'No fresh cloud observations. Check the Pi and cloud bridge.' : 'No fresh telemetry. Check the Pi or connect MQTT.');
   put('sbtemp', view.age === null ? '—' : `${view.age}s`);
   put('signal-count', view.count === null ? '—' : view.count);
   put('signal-level', view.level === null ? '—' : view.level);
