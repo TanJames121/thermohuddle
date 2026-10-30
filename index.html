@@ -1648,6 +1648,13 @@ vp.addEventListener('wheel', e => { camDist = constrain(camDist + e.delta * 0.15
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(err => console.warn('[sw]', err));
+    // Updated workers claim instantly (skipWaiting); apply their new shell once.
+    let swReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (swReloaded) return;
+      swReloaded = true;
+      location.reload();
+    });
   });
 }
 
