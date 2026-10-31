@@ -28,7 +28,7 @@ def validate_model_sections(source, *, now):
     if "vision" in source:
         vision = source["vision"]
         if (not isinstance(vision, dict)
-                or vision.get("model") != "PoultryVision-YOLOv11m"
+                or vision.get("model") not in ("PoultryVision-YOLOv11m", "ChickDetector-YOLOv8n")
                 or ((source["cam_ok"] or "inference_ms" in vision)
                     and not number(vision.get("inference_ms"), 0, 3600000))
                 or ((source["cam_ok"] or "confidence_min" in vision)

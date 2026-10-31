@@ -1,13 +1,14 @@
-"""PoultryVision chicken detections; normalized display positions are NOT cm."""
+"""ChickDetector (3-class YOLOv8n) detections; normalized display positions are NOT cm."""
 import math
 import hashlib
+from collections import Counter
 from pathlib import Path
 import time
 
 
 class ChickenVision:
     """Load only the audited, revision-pinned checkpoint, never arbitrary pickle."""
-    SHA256 = 'f68d3a009631b2d42f3d7cccd0dc315568b75a2c33b05a9443f599350ade329d'
+    SHA256 = '3b11fc21f667e582e1d2c28ea209473a43508a6f34c9ae15ee6b585cd5a11581'
 
     def __init__(self, checkpoint, confidence=.35, image_size=640):
         import torch
@@ -19,7 +20,7 @@ class ChickenVision:
             raise ValueError('invalid inference configuration')
         torch.set_num_threads(2)
         self.model = YOLO(str(checkpoint), task='detect')
-        if self.model.names != {0: 'chicken', 1: 'egg'}:
+        if self.model.names != {0: 'Healthy_chick', 1: 'Lame_chick', 2: 'chick'}:
             raise ValueError('unexpected camera class mapping')
         self.confidence, self.image_size = confidence, image_size
 
@@ -30,18 +31,23 @@ class ChickenVision:
                 or min(frame.shape[:2]) < 1):
             raise ValueError('expected nonempty uint8 BGR frame')
         start = time.monotonic()
-        result = self.model.predict(frame, conf=self.confidence, classes=[0],
+        result = self.model.predict(frame, conf=self.confidence,
                                     imgsz=self.image_size, device='cpu',
                                     max_det=1000, verbose=False)[0]
         rows = result.boxes.data.cpu().tolist()
         height, width = frame.shape[:2]
         points = positions_from_boxes(rows, width, height)
+        tally = Counter(int(r[5]) for r in rows)
+        healthy, lame = tally.get(0, 0), tally.get(1, 0)
         return {'count': len(points), 'chicks': points, 'boxes': rows,
-                'vision': {'model': 'PoultryVision-YOLOv11m',
+                'vision': {'model': 'ChickDetector-YOLOv8n',
                            'confidence_min': self.confidence,
                            'inference_ms': round((time.monotonic() - start) * 1000, 2),
                            'coordinate_system': 'uncalibrated_camera',
-                           'calibrated': False}}
+                           'calibrated': False,
+                           'classes': {self.model.names[k]: v for k, v in tally.items()},
+                           'lame_ratio': round(lame / (healthy + lame), 4)
+                                         if healthy + lame else None}}
 
 
 def positions_from_boxes(rows, width, height):
@@ -51,7 +57,7 @@ def positions_from_boxes(rows, width, height):
     for x1, y1, x2, y2, confidence, cls in rows:
         if not all(math.isfinite(v) for v in (x1, y1, x2, y2, confidence, cls)):
             raise ValueError('non-finite detection')
-        if int(cls) != 0 or x2 <= x1 or y2 <= y1:
+        if x2 <= x1 or y2 <= y1:
             continue
         cx = min(width, max(0, (x1 + x2) / 2))
         cy = min(height, max(0, (y1 + y2) / 2))

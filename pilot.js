@@ -22,7 +22,7 @@ window.pilotViewState = function (sample, now = Date.now()) {
   const fresh = Number.isFinite(age) && age >= 0 && age < 30000;
   const cameraLive = fresh && sample.cam_ok === true;
   const vision = sample && sample.vision;
-  const detector = !!vision && vision.model === 'PoultryVision-YOLOv11m'
+  const detector = !!vision && ['PoultryVision-YOLOv11m', 'ChickDetector-YOLOv8n'].includes(vision.model)
     && vision.coordinate_system === 'uncalibrated_camera' && vision.calibrated === false
     && pilotNumber(vision.inference_ms, 0, 3600000) && pilotNumber(vision.confidence_min, 0, 1);
   const positionsValid = !!sample && Array.isArray(sample.chicks) && sample.chicks.length === sample.count
@@ -60,7 +60,7 @@ window.pilotViewState = function (sample, now = Date.now()) {
     ? `Audio model flags Unhealthy · uncalibrated. Possible distress or illness — check the brooder directly. Not an automated diagnosis; no equipment is triggered.`
     : '—';
   return {
-    fresh, cameraLive, micLive, detector, classifierLive,
+    fresh, cameraLive, micLive, detector, detectorModel: detector ? vision.model : null, classifierLive,
     age: Number.isFinite(age) ? Math.max(0, Math.floor(age / 1000)) : null,
     count, candidate, assessmentState: 'UNKNOWN', controlAllowed: false,
     distress, distressTitle, distressDetail,
@@ -153,7 +153,9 @@ window.renderPilot = function () {
   put('whyico', 'i');
   put('whyt', view.assessmentTitle);
   put('whyb', `${view.assessmentDetail} ${view.detector
-    ? 'PoultryVision-YOLOv11m detects chickens, not individual identities. Coordinates and spatial metrics are uncalibrated.'
+    ? (view.detectorModel === 'ChickDetector-YOLOv8n'
+        ? 'ChickDetector-YOLOv8n detects day-old chicks, not individual identities. Coordinates and spatial metrics are uncalibrated.'
+        : 'PoultryVision-YOLOv11m detects chickens, not individual identities. Coordinates and spatial metrics are uncalibrated.')
     : 'Positions come from motion blobs, not a trained chick detector. Calibrate the floor area and scale before interpreting spatial metrics.'} Healthy is an audio class, not evidence of comfort. Health and thermal interpretation are not validated. Heater and fan control are disabled.`);
 };
 
