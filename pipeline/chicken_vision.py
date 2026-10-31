@@ -10,7 +10,7 @@ class ChickenVision:
     """Load only the audited, revision-pinned checkpoint, never arbitrary pickle."""
     SHA256 = '3b11fc21f667e582e1d2c28ea209473a43508a6f34c9ae15ee6b585cd5a11581'
 
-    def __init__(self, checkpoint, confidence=.35, image_size=640):
+    def __init__(self, checkpoint, confidence=.30, image_size=640):
         import torch
         from ultralytics import YOLO
         checkpoint = Path(checkpoint)
@@ -33,6 +33,7 @@ class ChickenVision:
         start = time.monotonic()
         result = self.model.predict(frame, conf=self.confidence,
                                     imgsz=self.image_size, device='cpu',
+                                    augment=True,
                                     max_det=1000, verbose=False)[0]
         rows = result.boxes.data.cpu().tolist()
         height, width = frame.shape[:2]
