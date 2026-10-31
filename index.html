@@ -1025,6 +1025,10 @@ $('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', '
 //  · .mjpg stream → continuous <img> (same-Wi-Fi only behind plain HTTP)
 //  · other URL → <video> (WebRTC/HLS via go2rtc/MediaMTX)
 let feedOn = false, feedTimer = null;
+// LAN pilot default: the AI observer's own snapshot, served by the same host.
+// (github.io has no frame file — cloud viewers keep the "not configured" message.)
+const FEED_URL = (window.BROKER && window.BROKER.feed_url)
+  || (/github\.io$/.test(location.hostname) ? null : 'frame_latest.jpg');
 function ensureFeedImg() {
   let img = document.getElementById('feedimg');
   if (!img) {
@@ -1036,7 +1040,7 @@ function ensureFeedImg() {
   return img;
 }
 $('btnfeed').addEventListener('click', () => {
-  if (!feedOn && !(window.BROKER && window.BROKER.feed_url)) {
+  if (!feedOn && !FEED_URL) {
     $('observation-note').textContent = 'Live video is not configured. Camera-derived positions are still available; a separate stream server is needed for video.';
     LOGS.log('info', 'video not configured — spatial view remains available');
     return;
@@ -1049,7 +1053,7 @@ $('btnfeed').addEventListener('click', () => {
 });
 function startFeed() {
   const v = document.getElementById('livefeed');
-  const cfg = (window.BROKER && window.BROKER.feed_url) || null;
+  const cfg = FEED_URL || null;
   const guess = cfg || (location.hostname && location.hostname !== 'localhost'
     ? `http://${location.hostname}:8000/stream.mjpg` : null);
   if (!guess) { LOGS.log('warn', 'no feed URL — add BROKER.feed_url or open via Pi host'); return; }
