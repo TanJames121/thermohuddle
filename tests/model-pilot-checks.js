@@ -157,7 +157,14 @@ test('Unhealthy classifier label raises an unvalidated distress warning', () => 
   assert.match(state.distressTitle, /UNHEALTHY/);
   assert.match(state.distressTitle, /80%/);
   assert.match(state.distressDetail, /Not an automated diagnosis/);
-  assert.match(state.distressDetail, /No chicks detected/);
+});
+test('no chicks in view means room noise can never trigger the distress alarm', () => {
+  const input = sample(); input.count = 0; input.chicks = [];
+  input.audio.label = 'Unhealthy';
+  input.audio.probabilities = { Healthy: 0.001, Noise: 0.0001, Unhealthy: 0.9989 };
+  const state = view(input);
+  assert.equal(state.distress, false);
+  assert.equal(state.distressTitle, '—');
 });
 test('distress warning needs live classifier evidence, never Healthy/Unknown/stale', () => {
   for (const label of ['Healthy', 'Unknown']) {

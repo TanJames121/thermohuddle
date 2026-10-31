@@ -50,13 +50,14 @@ window.pilotViewState = function (sample, now = Date.now()) {
     && pilotAssessmentValid(assessment) && assessment.samples > 0
     && !['NO_DETECTIONS', 'INSUFFICIENT'].includes(assessment.pattern);
   const candidate = usableAssessment ? assessment.candidate : 'UNKNOWN';
-  // Audio-model distress flag: real classifier evidence only, never inferred from silence.
-  const distress = classifierLive && audio.label === 'Unhealthy';
+  // Audio-model distress flag: real classifier evidence AND chicks detected in view,
+  // so room noise with no birds can never trigger the alarm.
+  const distress = classifierLive && audio.label === 'Unhealthy' && count > 0;
   const distressTitle = distress
     ? `⚠ UNHEALTHY VOCALIZATION — ${Math.round(audio.probabilities.Unhealthy * 100)}% classifier probability`
     : '—';
   const distressDetail = distress
-    ? `Audio model flags Unhealthy · uncalibrated. Possible distress or illness — check the brooder directly.${count === 0 ? ' No chicks detected in view; the mic may be reacting to background noise.' : ''} Not an automated diagnosis; no equipment is triggered.`
+    ? `Audio model flags Unhealthy · uncalibrated. Possible distress or illness — check the brooder directly. Not an automated diagnosis; no equipment is triggered.`
     : '—';
   return {
     fresh, cameraLive, micLive, detector, classifierLive,
