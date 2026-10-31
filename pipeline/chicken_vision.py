@@ -9,6 +9,10 @@ import time
 class ChickenVision:
     """Load only the audited, revision-pinned checkpoint, never arbitrary pickle."""
     SHA256 = '3b11fc21f667e582e1d2c28ea209473a43508a6f34c9ae15ee6b585cd5a11581'
+    # Chicks are small relative to the visible floor; a box covering ~1/3 of the
+    # frame height is a person/foreground object the 3-class model was never
+    # trained to reject (no negative images). Size, unlike appearance, cannot lie.
+    MAX_BOX_HEIGHT_FRAC = 0.30
 
     def __init__(self, checkpoint, confidence=.30, image_size=640):
         import torch
@@ -54,11 +58,12 @@ class ChickenVision:
 def positions_from_boxes(rows, width, height):
     if width <= 0 or height <= 0:
         raise ValueError('invalid frame dimensions')
+    cls_limit = ChickenVision.MAX_BOX_HEIGHT_FRAC * height
     positions = []
     for x1, y1, x2, y2, confidence, cls in rows:
         if not all(math.isfinite(v) for v in (x1, y1, x2, y2, confidence, cls)):
             raise ValueError('non-finite detection')
-        if x2 <= x1 or y2 <= y1:
+        if x2 <= x1 or y2 <= y1 or (y2 - y1) > cls_limit:
             continue
         cx = min(width, max(0, (x1 + x2) / 2))
         cy = min(height, max(0, (y1 + y2) / 2))

@@ -16,7 +16,9 @@ class VisionTests(unittest.TestCase):
         # x1,y1,x2,y2,confidence,class; any class counts as a chick detection
         # (3-class ChickDetector: counting must not drop Healthy/Lame boxes).
         result = positions_from_boxes([[100, 100, 200, 200, .9, 0],
-                                       [200, 200, 240, 240, .8, 1]], 640, 480)
+                                       [200, 200, 240, 240, .8, 1],
+                                       [100, 100, 500, 400, .8, 2]], 640, 480)
+        # third box spans 62% of frame height -> person-sized, size gate drops it
         self.assertEqual(len(result), 2)
         self.assertAlmostEqual(result[0][0], -26.5625)
         self.assertAlmostEqual(result[0][1], -18.75)
