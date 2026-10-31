@@ -524,7 +524,7 @@ function baselineForDay(day) {
   return PLAN.baseDay1 + (d - 1) / 13 * (PLAN.baseDay14 - PLAN.baseDay1);
 }
 
-let chicks = [], liveDots = [], liveFresh = false;
+let chicks = [], liveDots = [], liveFresh = false, liveDotsHold = [], liveDotsHoldTs = 0;
 let sim = { t: 0, mode: 'manual', forced: 'LIVE', day: 1,
             baseline: 34.0, trim: 0, setpoint: 34.0, lampPWM: 0.8,
             floorT: 32.5, classState: 'COMFY', holdTimer: 0, nh3: 6,
@@ -835,7 +835,15 @@ function draw() {
   camera(Math.cos(camAng) * ch, -cy, Math.sin(camAng) * ch, 0, -12, 0, 0, 1, 0);
   drawBrooder();
   const isLive = sim.forced === 'LIVE';
-  if (isLive) { if (window.pilotViewState(window.PILOT_SAMPLE).cameraLive) for (const d of liveDots) drawDot(d.x, d.z); }
+  if (isLive) {
+    if (window.pilotViewState(window.PILOT_SAMPLE).cameraLive) {
+      for (const d of liveDots) drawDot(d.x, d.z);
+      // blur/occlusion flicker: keep last-seen positions visible ~12 s
+      const holdAge = Date.now() - liveDotsHoldTs;
+      if (!liveDots.length && liveDotsHold.length && holdAge < 12000)
+        for (const d of liveDotsHold) drawDot(d.x, d.z);
+    }
+  }
   else { drawCrowdPulse(isLive); for (const c of chicks) c.display(); }
   if (!isLive) drawHeat();
 }
@@ -1545,6 +1553,7 @@ window.setChickPositions = function(arr, centered = false) {
   }).filter(p => isFinite(p.x) && isFinite(p.z));
   sim.stats = computeStatsPts(liveDots.map(d => [d.x, d.z]));
   liveFresh = liveDots.length > 0;
+  if (liveDots.length) { liveDotsHold = liveDots; liveDotsHoldTs = Date.now(); }
   if (sim.forced !== 'LIVE') setScenario('LIVE');
 };
 function ingestTrackingJSON(txt) {
