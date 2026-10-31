@@ -1,5 +1,5 @@
-/* ThermoHuddle service worker — offline app shell (v14: efficient cloud-fed spatial view). */
-const CACHE = 'thermohuddle-v15';
+/* ThermoHuddle service worker — offline model-aware observation-only shell. */
+const CACHE = 'thermohuddle-v16';
 const ASSETS = [
   './index.html',
   './brooder.css',

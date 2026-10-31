@@ -9,5 +9,14 @@ window.runCloudFeedChecks = function () {
   const url = new URL(window.PILOT_CLOUD_URL);
   check(url.protocol === 'https:' && !url.username && !url.password, 'Cloud feed must be HTTPS without embedded credentials');
   check(!url.searchParams.has('apikey') && !url.searchParams.has('token'), 'Public snapshot must not require secret query parameters');
-  return { passed: 7, message: 'Visible-tab automatic refresh, MQTT priority and public URL checks passed' };
+  check(typeof window.cloudObservationOf === 'function', 'Cloud model forwarding adapter is missing');
+  const vision = { model: 'PoultryVision-YOLOv11m' };
+  const assessment = { state: 'UNKNOWN', control_allowed: false };
+  const observation = window.cloudObservationOf({ ts: 1, cam_ok: true, count: 0, chicks: [],
+    vision, assessment, audio: { label: 'Unknown' }, floorT: 32.5, duty: 100, secret: 'fixture-not-a-key' });
+  check(observation.vision === vision && observation.assessment === assessment,
+    'Cloud observations must preserve model metadata and assessment');
+  check(!('floorT' in observation) && !('duty' in observation) && !('secret' in observation),
+    'Cloud forwarding must exclude thermal stubs, controls and unknown fields');
+  return { passed: 10, message: 'Cloud scheduling, public URL and trained-model forwarding checks passed' };
 };

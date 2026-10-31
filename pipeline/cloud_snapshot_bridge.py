@@ -18,6 +18,67 @@ def number(value, low, high):
             and math.isfinite(value))
 
 
+AUDIO_CLASSES = ("Healthy", "Noise", "Unhealthy")
+ASSESSMENT_STATES = ("UNKNOWN", "CROWDING", "POSSIBLE_COLD", "POSSIBLE_HOT",
+                     "POSSIBLE_DRAFT", "COMFY_CANDIDATE")
+
+
+def validate_model_sections(source, *, now):
+    """Known fields are typed and bounded; unknown fields never become public."""
+    if "vision" in source:
+        vision = source["vision"]
+        if (not isinstance(vision, dict)
+                or vision.get("model") != "PoultryVision-YOLOv11m"
+                or ((source["cam_ok"] or "inference_ms" in vision)
+                    and not number(vision.get("inference_ms"), 0, 3600000))
+                or ((source["cam_ok"] or "confidence_min" in vision)
+                    and not number(vision.get("confidence_min"), 0, 1))
+                or vision.get("coordinate_system") != "uncalibrated_camera"
+                or vision.get("calibrated") is not False):
+            raise ValueError("invalid vision metadata")
+    if "assessment" in source:
+        assessment = source["assessment"]
+        if (not isinstance(assessment, dict)
+                or assessment.get("state") not in ASSESSMENT_STATES
+                or assessment.get("candidate") not in ASSESSMENT_STATES
+                or assessment.get("pattern") not in (
+                    "CLUSTERED", "DISPERSED", "ASYMMETRIC", "EVEN",
+                    "NO_DETECTIONS", "INSUFFICIENT")
+                or assessment.get("status") not in (
+                    "uncalibrated", "warming_up", "observation_only")
+                or assessment.get("control_allowed") is not False
+                or not number(assessment.get("window_s"), 0, 86400)
+                or type(assessment.get("samples")) is not int
+                or not 0 <= assessment["samples"] <= 1000000
+                or assessment.get("audio_support") not in (
+                    "abnormal_vocalization", "healthy_vocalization", "noise", "unavailable")
+                or not isinstance(assessment.get("reason"), str)
+                or len(assessment["reason"]) > 512
+                or any(not char.isprintable() for char in assessment["reason"])):
+            raise ValueError("invalid assessment")
+    if "audio" in source:
+        audio = source["audio"]  # Legacy audio is checked before this helper.
+        if ("model" in audio and audio["model"] != "chicken-vocalization-classifier"
+                or "available" in audio and type(audio["available"]) is not bool
+                or "inference_ms" in audio and not number(audio["inference_ms"], 0, 3600000)
+                or "ts" in audio and not number(audio["ts"], 0, now)):
+            raise ValueError("invalid audio metadata")
+        if "probabilities" in audio:
+            probabilities = audio["probabilities"]
+            # Zero scores mean explicitly unavailable, not a distribution or diagnosis.
+            unavailable_zeros = (audio.get("available") is False
+                                 and audio.get("label") == "Unknown"
+                                 and isinstance(probabilities, dict)
+                                 and set(probabilities) == set(AUDIO_CLASSES)
+                                 and all(number(value, 0, 0) for value in probabilities.values()))
+            # Never allow extra nested keys (including credentials) through.
+            if (not isinstance(probabilities, dict)
+                    or set(probabilities) != set(AUDIO_CLASSES)
+                    or not all(number(value, 0, 1) for value in probabilities.values())
+                    or not unavailable_zeros and abs(sum(probabilities.values()) - 1) > 0.001):
+                raise ValueError("invalid audio probabilities")
+
+
 def sanitize(source, *, now):
     """Reject malformed/stale samples; never synthesize a measurement or time."""
     if not isinstance(source, dict):
@@ -51,15 +112,26 @@ def sanitize(source, *, now):
             if key in audio and not number(audio[key], *bounds):
                 raise ValueError("invalid audio measurement")
         if "label" in audio and audio["label"] not in (
-                "quiet", "normal", "loud", "distress_like"):
+                "quiet", "normal", "loud", "distress_like",
+                "Healthy", "Noise", "Unhealthy", "Unknown"):
             raise ValueError("invalid audio label")
+    validate_model_sections(source, now=now)
     snapshot = {key: source[key] for key in
                 ("ts", "seq", "boot_id", "count", "chicks", "cam_ok")
                 if key in source}
     if "audio" in source:
         snapshot["audio"] = {key: source["audio"][key] for key in
-                             ("level_db", "peak_hz", "label", "distress_ratio")
+                             ("level_db", "peak_hz", "label", "distress_ratio",
+                              "probabilities", "model", "available", "inference_ms", "ts")
                              if key in source["audio"]}
+    for section, fields in (
+            ("vision", ("model", "inference_ms", "confidence_min",
+                        "coordinate_system", "calibrated")),
+            ("assessment", ("state", "candidate", "pattern", "status", "reason",
+                            "control_allowed", "window_s", "samples", "audio_support"))):
+        if section in source:
+            snapshot[section] = {key: source[section][key] for key in fields
+                                 if key in source[section]}
     return snapshot
 
 

@@ -150,15 +150,15 @@
   .chip.amber { background: var(--amber-soft); border-color: var(--amber); }
   .chip.amber .v { color: var(--amber); }
 
-  /* crowding alarm card */
-  #crowdcard {
+  /* crowding + audio-distress alarm cards */
+  #crowdcard, #distresscard {
     display: none; margin-top: 8px;
     background: var(--red-soft); border: 1px solid var(--red);
     border-radius: 14px; padding: 12px 14px;
   }
-  #crowdcard.show { display: block; }
-  #crowdcard .ct { color: var(--red); font-weight: 800; font-size: 14px; }
-  #crowdcard .cs { color: #8c1a20; font-size: 11.5px; margin-top: 3px; }
+  #crowdcard.show, #distresscard.show { display: block; }
+  #crowdcard .ct, #distresscard .ct { color: var(--red); font-weight: 800; font-size: 14px; }
+  #crowdcard .cs, #distresscard .cs { color: #8c1a20; font-size: 11.5px; margin-top: 3px; }
 
   /* behavioral reasoning card ("why") */
   #whycard {
@@ -386,6 +386,10 @@
         <div id="crowdcard">
           <div class="ct">⚠ CROWDING ALARM — acknowledge required</div>
           <div class="cs">Alarm + ventilation burst + notification sent · re-alerts every 5 min until acknowledged.</div>
+        </div>
+        <div id="distresscard">
+          <div class="ct" id="distress-title">—</div>
+          <div class="cs" id="distress-sub">—</div>
         </div>
         <div id="whycard">
           <div class="why-ico" id="whyico">🔎</div>
@@ -1602,6 +1606,8 @@ window.connectMQTT = function(url, opts) {
       } else if (t.endsWith('inference/window')) {
         if (d.state) sim.classState = d.state;
         if (isFinite(d.trim)) sim.trim = d.trim;
+        // Trained-model observation packets drive the same read-only pilot view.
+        if (d.vision || d.assessment) ingestTrackingJSON(payload.toString());
       } else if (!t.endsWith('status')) ingestTrackingJSON(payload.toString());
     } catch (e) { console.warn('[mqtt] bad payload'); }
   });

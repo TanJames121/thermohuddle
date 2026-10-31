@@ -1,6 +1,9 @@
 /* Public read-only camera/mic snapshots. All write credentials stay on the Pi. */
 window.PILOT_CLOUD_URL = 'https://thoissoyiupjrrsqmika.supabase.co/storage/v1/object/public/frames/telemetry/latest.json';
 window.cloudShouldPoll = (hidden, live, mqttFresh) => !hidden && live && !mqttFresh;
+window.cloudObservationOf = sample => ({ ts: sample.ts, seq: sample.seq, boot_id: sample.boot_id,
+  count: sample.count, chicks: sample.chicks, cam_ok: sample.cam_ok, audio: sample.audio,
+  vision: sample.vision, assessment: sample.assessment });
 let cloudInFlight = false;
 if (location.protocol === 'https:') {
   document.getElementById('connchip').textContent = 'Connecting to cloud';
@@ -26,8 +29,7 @@ window.pollCloudObservation = async function () {
       || !sample.chicks.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
       || !window.pilotViewState(sample).fresh) throw new Error('No valid fresh cloud observation');
     // The Pi allowlists this payload; never ingest its stub thermal/control fields.
-    const observation = { ts: sample.ts, seq: sample.seq, boot_id: sample.boot_id,
-      count: sample.count, chicks: sample.chicks, cam_ok: sample.cam_ok, audio: sample.audio };
+    const observation = window.cloudObservationOf(sample);
     ingestTrackingJSON(JSON.stringify(observation));
     window.__pilotSource = 'cloud';
     chip.textContent = 'Auto updates · 2s';

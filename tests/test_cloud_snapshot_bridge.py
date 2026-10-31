@@ -28,7 +28,135 @@ def sample():
     }
 
 
+def model_sample():
+    source = sample()
+    source["vision"] = {
+        "model": "PoultryVision-YOLOv11m", "inference_ms": 123.5,
+        "confidence_min": 0.25, "coordinate_system": "uncalibrated_camera",
+        "calibrated": False,
+    }
+    source["audio"].update(
+        label="Healthy", probabilities={"Healthy": 0.7, "Noise": 0.2, "Unhealthy": 0.1},
+        model="chicken-vocalization-classifier", available=True,
+        inference_ms=12.5, ts=1700000000.0)
+    source["assessment"] = {
+        "state": "UNKNOWN", "candidate": "POSSIBLE_COLD", "pattern": "CLUSTERED",
+        "status": "uncalibrated", "reason": "Camera scale needs calibration.",
+        "control_allowed": False, "window_s": 30.0, "samples": 3,
+        "audio_support": "healthy_vocalization",
+    }
+    return source
+
+
 class SnapshotTests(unittest.TestCase):
+    def test_model_metadata_allowlist_preserves_observations_only(self):
+        source = model_sample()
+        expected = copy.deepcopy(source)
+        source.update(credentials={"password": "tests-only"}, controls={"heater": True})
+        for section in ("audio", "vision", "assessment"):
+            source[section]["secret"] = {"token": "tests-only"}
+            source[section]["heater_duty"] = 99
+        self.assertEqual(bridge.sanitize(source, now=1700000001), expected)
+
+    def test_model_fields_reject_malformed_nonfinite_out_of_bounds_and_controls(self):
+        invalid = {
+            "vision": [
+                (None, None), (None, []), ("model", "other-model"),
+                ("model", {"secret": "tests-only"}), ("inference_ms", -1),
+                ("inference_ms", float("nan")), ("inference_ms", float("inf")),
+                ("inference_ms", True), ("inference_ms", 3600001),
+                ("confidence_min", -0.01), ("confidence_min", 1.01),
+                ("confidence_min", False), ("confidence_min", float("nan")),
+                ("coordinate_system", "calibrated_floor"),
+                ("calibrated", True), ("calibrated", 0),
+            ],
+            "audio": [
+                ("model", "other-model"), ("available", 1),
+                ("available", "false"), ("inference_ms", -1),
+                ("inference_ms", True), ("inference_ms", float("inf")),
+                ("inference_ms", 3600001), ("ts", -1),
+                ("ts", 1700000002), ("ts", True), ("ts", float("nan")),
+                ("label", ["Healthy"]), ("probabilities", None),
+                ("probabilities", [0.7, 0.2, 0.1]),
+                ("probabilities", {"Healthy": 0.9, "Noise": 0.1}),
+                ("probabilities", {"Healthy": 0.7, "Noise": 0.2, "Unhealthy": 0.1, "secret": 0}),
+                ("probabilities", {"Healthy": 0.7, "Noise": 0.1, "Unhealthy": 0.1}),
+                ("probabilities", {"Healthy": True, "Noise": 0, "Unhealthy": 0}),
+                ("probabilities", {"Healthy": float("nan"), "Noise": 0, "Unhealthy": 0}),
+                ("probabilities", {"Healthy": 1.1, "Noise": -0.1, "Unhealthy": 0}),
+            ],
+            "assessment": [
+                (None, None), (None, []), ("state", "COMFY"),
+                ("candidate", "COLD"), ("pattern", "cold"),
+                ("status", "validated"), ("control_allowed", True),
+                ("control_allowed", 0), ("reason", "x" * 513),
+                ("reason", "injected\x00text"), ("reason", {}),
+                ("window_s", -1), ("window_s", float("nan")),
+                ("window_s", True), ("window_s", 86401),
+                ("samples", -1), ("samples", 1.5), ("samples", True),
+                ("samples", 1000001), ("audio_support", "comfortable"),
+            ],
+        }
+        for section, mutations in invalid.items():
+            for key, value in mutations:
+                source = model_sample()
+                if key is None:
+                    source[section] = value
+                else:
+                    source[section][key] = value
+                with self.subTest(section=section, key=key, value=value):
+                    with self.assertRaises(ValueError):
+                        bridge.sanitize(source, now=1700000001)
+        # New structured sections must be complete, unlike legacy optional audio.
+        for section in ("vision", "assessment"):
+            for key in model_sample()[section]:
+                source = model_sample()
+                del source[section][key]
+                with self.subTest(missing=f"{section}.{key}"), self.assertRaises(ValueError):
+                    bridge.sanitize(source, now=1700000001)
+
+    def test_unavailable_camera_and_audio_do_not_require_fabricated_inference(self):
+        source = model_sample()
+        source.update(count=0, chicks=[], cam_ok=False)
+        del source["vision"]["inference_ms"]
+        del source["vision"]["confidence_min"]
+        source["audio"] = {"label": "Unknown", "available": False,
+                           "model": "chicken-vocalization-classifier", "ts": 0}
+        self.assertEqual(bridge.sanitize(source, now=1700000001), source)
+        # Old audio metadata does not invalidate fresh camera observations;
+        # freshness is evaluated independently by the dashboard.
+        source = model_sample()
+        source["audio"]["ts"] = 1699999971
+        self.assertEqual(bridge.sanitize(source, now=1700000001), source)
+
+    def test_valid_model_enums_boundaries_and_probability_rounding(self):
+        for label in ("Healthy", "Noise", "Unhealthy", "Unknown",
+                      "quiet", "normal", "loud", "distress_like"):
+            source = model_sample()
+            source["audio"]["label"] = label
+            source["audio"]["probabilities"] = {"Healthy": 0.3333, "Noise": 0.3333, "Unhealthy": 0.3333}
+            self.assertEqual(bridge.sanitize(source, now=1700000001), source)
+        enums = {
+            "state": ("UNKNOWN", "CROWDING", "POSSIBLE_COLD", "POSSIBLE_HOT", "POSSIBLE_DRAFT", "COMFY_CANDIDATE"),
+            "candidate": ("UNKNOWN", "CROWDING", "POSSIBLE_COLD", "POSSIBLE_HOT", "POSSIBLE_DRAFT", "COMFY_CANDIDATE"),
+            "pattern": ("CLUSTERED", "DISPERSED", "ASYMMETRIC", "EVEN", "NO_DETECTIONS", "INSUFFICIENT"),
+            "status": ("uncalibrated", "warming_up", "observation_only"),
+            "audio_support": ("abnormal_vocalization", "healthy_vocalization", "noise", "unavailable"),
+        }
+        for key, values in enums.items():
+            for value in values:
+                source = model_sample()
+                source["assessment"][key] = value
+                with self.subTest(key=key, value=value):
+                    self.assertEqual(bridge.sanitize(source, now=1700000001), source)
+        source = model_sample()
+        source.update(count=0, chicks=[], cam_ok=False)
+        source["audio"].update(available=False, label="Unknown", inference_ms=0)
+        del source["audio"]["ts"]
+        source["vision"].update(inference_ms=0, confidence_min=1)
+        source["assessment"].update(window_s=0, samples=0, reason="")
+        self.assertEqual(bridge.sanitize(source, now=1700000001), source)
+
     def test_allowlist_drops_thermal_control_and_nested_secrets(self):
         self.assertIsNotNone(bridge, "snapshot bridge implementation is missing")
         source = sample()
@@ -197,6 +325,21 @@ class PublishingTests(unittest.TestCase):
         handler = bridge.NoRedirect()
         self.assertIsNone(handler.redirect_request(None, None, 307, "", {},
                                                    "https://example.invalid/"))
+
+
+class UnavailableAudioTests(unittest.TestCase):
+    def test_zero_probabilities_for_explicit_unavailable_unknown_preserve_camera(self):
+        sanitize = bridge.sanitize
+        packet = {'ts': 999.0, 'cam_ok': True, 'count': 0, 'chicks': [],
+                  'audio': {'label': 'Unknown', 'available': False,
+                            'model': 'chicken-vocalization-classifier',
+                            'probabilities': {'Healthy': 0., 'Noise': 0., 'Unhealthy': 0.}}}
+        self.assertEqual(sanitize(packet, now=1000)['audio']['label'], 'Unknown')
+        for available, label in [(True, 'Unknown'), (False, 'Healthy')]:
+            with self.subTest(available=available, label=label):
+                packet['audio'].update(available=available, label=label)
+                with self.assertRaises(ValueError):
+                    sanitize(packet, now=1000)
 
 
 if __name__ == "__main__":
