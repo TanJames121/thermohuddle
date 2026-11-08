@@ -1,9 +1,9 @@
 # 🐤 ThermoHuddle — Project Overview & Feature Reference
 
-**What the project is, how every feature works, and why the design is the way it is.** For setup/deployment steps, see `ThermoHuddle_Build_Guide.md`.
+**What the project is, how every feature works, and why the design is the way it is.** For setup/deployment steps, see `ThermoHuddle_Build_Guide.md`. For the authoritative paper text (conceptual framework, SOP, methodology), see `ThermoHuddle_Research_Plan.md` — **the paper is the source of truth**.
 
 Team: Bolda · Gabriel · Payumo · Tan · Tangcuangco — CpE 404 Capstone Design 1
-Based on: Capstone Proposal Form + Software Build Plan (Oct 14, @James Matthew)
+Based on: Capstone Proposal Form + Software Build Plan (Oct 14, @James Matthew) + manuscript revision (Nov 5)
 
 ---
 
@@ -19,7 +19,7 @@ Based on: Capstone Proposal Form + Software Build Plan (Oct 14, @James Matthew)
 | **Spatial statistics engine** | Nearest-Neighbour Distance, Clark–Evans ratio, Shannon occupancy entropy (4×4 grid), Ripley's K/L, centroid offset, anisotropy, max-cell fraction, radial distance, hidden fraction |
 | **Dual-modal distress detection** | Vision classification fused with MFCC audio distress scoring (INMP441, 1–8 kHz, fan-masked) |
 | **Cascade heater control** | Behavioral inference **trims** the age-based baseline setpoint of an inner PID loop → zero-cross/integral-cycle AC dimmer → ceramic emitter |
-| **Safety & hazard overrides** | Deterministic rules for drafts, crowding (smothering prevention), over-temp, ammonia, sensor faults — work even if the AI is dead |
+| **Safety & hazard overrides** | Deterministic rules for drafts, crowding (smothering prevention), over-temp, ammonia, sensor faults — work even if the AI is dead. Final install adds a **KSD301 hardware over-temp cutoff independent of software**, grounding, overcurrent protection, isolation, and wiring inspection (paper §3.2 Stage 3) |
 | **Cloud telemetry & dashboard** | MQTT (local broker) → SQLite logging → Supabase; the live app is the mobile 3D dashboard |
 
 ### The comfort states — behavior signatures and what the system does
@@ -64,11 +64,18 @@ Five isolated services on the Pi, so a crash in the AI can never stop the heater
 ```
 
 **Priority arbitration (a higher level always wins):**
-- **P0** hardware interlocks (zero-cross loss → gate off)
+- **P0** hardware interlocks (zero-cross loss → gate off) + the **KSD301 thermal cutoff** (hardware layer, paper §3.2 Stage 3)
 - **P1** software hard limits (over-temp 38 °C → heater off, resume at 36)
 - **P2** hazard alerts (ammonia 25/50 ppm, MQ-137 warm-up schedule)
 - **P3** behavioral trim (the AI — bounded, dwelled, fan-blanked)
 - **P4** age baseline schedule (34 °C day 1 → 29 °C day 14)
+
+> **Parameter status (paper §3.2 Stage 1):** the 34→29 °C schedule, 50–70 % RH
+> band, and the 25/50-ppm NH₃ bands are **preliminary design values**, to be
+> verified with qualified poultry-care guidance before live deployment. The
+> MQ-137 reading is treated as a **relative ammonia-related indication** unless
+> calibration against an independent reference supports defensible ppm values
+> (paper §1.7).
 
 **MQTT topics (S7):** `thermohuddle/telemetry/env` (10 s) · `inference/window` (60 s) · `control/setpoint` (on change) · `events` · `status` (retained last-will) · `cmd/#` (config + alarm ack). Every payload carries `v`, `ts`, `boot_id`, `seq`.
 

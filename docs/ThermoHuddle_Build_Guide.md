@@ -1,6 +1,6 @@
 # 🐤 ThermoHuddle — Build Guide (Setup, Deployment & Roadmap)
 
-**How to run, connect, store data, and build the whole thing step by step.** For what the project is and how each feature works, see `ThermoHuddle_Overview.md`.
+**How to run, connect, store data, and build the whole thing step by step.** For what the project is and how each feature works, see `ThermoHuddle_Overview.md`. For the authoritative paper text (SOP, methodology, respondents), see `ThermoHuddle_Research_Plan.md` — **the paper is the source of truth**; where the paper says "planned," treat repo instructions as the implementation path for those plans.
 
 Team: Bolda · Gabriel · Payumo · Tan · Tangcuangco — CpE 404 Capstone Design 1
 
@@ -250,6 +250,13 @@ Create a **public bucket** named `frames`:
 
 ## 5. Pi deployment checklist (when equipment arrives)
 
+> **Paper alignment (Research Plan §3.2 Stage 3):** the final installation will
+> additionally include a **KSD301 (or equivalent) hardware-rated over-temperature
+> cutoff independent of software**, protective grounding, appropriate overcurrent
+> protection, isolation, and a wiring inspection by qualified personnel **before
+> live-bird operation** (Stage 4 acceptance criteria). Treat steps 10+ as gated on
+> those items and on the required animal-welfare/safety approvals (Stage 6).
+
 ```bash
 # 1. Network + IP (write it down)
 hostname -I
@@ -278,10 +285,14 @@ libcamera-still --width 640 --height 480 -o test.jpg
 # 8. Zero-hardware dress rehearsal
 python3 pipeline/thermohuddle_draft_v2.py --simulate
 
-# 9. Replay tuning (recorded frames, no live control)
+# 9. Replay tuning (recorded frames, no live control) — PILOT/DEV DATA ONLY;
+#    per Research Plan §3.2 Stage 5, tuning observations stay separate from the
+#    final evaluation dataset, and model + thresholds get FROZEN before the
+#    final evaluation data is assessed
 python3 pipeline/thermohuddle_draft_v2.py --replay ~/frames/
 
-# 10. Go live
+# 10. Go live — GATED: KSD301 cutoff installed, wiring inspected, welfare
+#     approval secured (Research Plan §3.2 Stages 3–4, §1.7)
 python3 pipeline/thermohuddle_draft_v2.py --camera 0 --day 1
 
 # 11. Serve the app
@@ -312,7 +323,7 @@ Build order is dependency-driven: **heater control and safety work before any AI
 
 **Two golden rules:** every sensor/actuator behind a small interface with real+fake versions (all logic runs on your laptop); **th-sensord never imports vision or audio** (a crash there cannot stop the heater).
 
-**Open items to confirm with your adviser ([A] assumptions):** T_max 38 °C, NH₃ thresholds, trim limits/dwell/rate, confidence cutoff 0.6, baseline curve 34→29 °C linear, RF size, Supabase vs another dashboard target.
+**Open items to confirm with your adviser ([A] assumptions):** T_max 38 °C, NH₃ thresholds, trim limits/dwell/rate, confidence cutoff 0.6, baseline curve 34→29 °C linear, RF size, Supabase vs another dashboard target. **Per Research Plan §3.2 Stages 1 & 5, these are now formally "preliminary design values"** — the 34→29 °C schedule, 50–70 % RH band, and 25-ppm criterion will be verified with qualified poultry-care guidance before live deployment, and the dwell/rate/confidence settings must not be presented as evidence-based optima without results.
 
 ---
 
@@ -337,12 +348,24 @@ One brooder only? Alternate Run A → Run B and **record daily ambient min/max**
 
 ### 7.2 Metric definitions (write these into Chapter 3 before collecting)
 
+> **Paper alignment:** the paper's SOP Q4 (Research Plan §1.4) now enumerates the
+> official metric list: (a) classification accuracy + class-wise performance,
+> (b) % of **valid monitoring time** in the approved band, (c) response /
+> stabilization / overshoot, (d) hazard-alert latency + delivery, (e) 14-day
+> survival + incident-record completeness, (f) image-processing latency,
+> (g) local-control continuity + remote-dashboard availability, (h) end-user +
+> expert evaluation. The table below remains the data-collection view; report
+> counts of valid frames/audio segments/tests/hours **after collection**
+> (Research Plan §3.5), with tuning data kept separate from evaluation data.
+
 | Metric | Definition | Why it matters |
 |---|---|---|
-| **Survival %** | (alive at day 14 ÷ placed at day 0) × 100 | the headline number — state the window; RRLs often use 0–21 or 0–42 |
+| **Survival %** | (alive at day 14 ÷ placed at day 0) × 100 — reported **descriptively**; per §1.7, without a controlled comparative study results cannot establish that ThermoHuddle causes a mortality change | the headline number — state the window; RRLs often use 0–21 or 0–42 |
 | **Mortality / 100 chick-days** | deaths ÷ mean population ÷ days × 100 | normalises batch size and duration → comparable across studies |
 | **Cause attribution** | smothering / cold stress / other / culled — logged with the state + flags at the moment of death | links deaths to crowding episodes: your strongest single result if it occurs |
-| **Comfortability** | % of windows with state = COMFY + crowding-episode count | measured per-day ⇒ far more statistical power than mortality |
+| **Comfortability** | % of **valid** windows with state = COMFY + crowding-episode count | measured per-day ⇒ far more statistical power than mortality |
+| **Alert latency & delivery** | time from hazard condition to alarm issued/received | SOP Q4(d) |
+| **Continuity/availability** | local-control continuity + dashboard sync availability | SOP Q4(g) |
 
 ### 7.3 Statistics — descriptive first, inferential as future work
 
@@ -373,6 +396,12 @@ Use them two ways: (a) show **your Arm A is typical** of the local baseline (thi
 | Acceptability (ISO 25010, weighted mean) | | *survey rates the developed system* | |
 
 All of it is computable from `runs`, `deaths`, `behavior_windows` and `control_events` via the arm views in **§3.3** (`v_arm_survival`, `v_mortality`, `v_comfort_by_arm`, `v_arm_events`).
+
+### 7.7 Respondents & annotation (per Research Plan §3.4–3.5)
+
+- **Acceptability survey: 30 respondents** — 15 intended end-users (small-scale poultry raisers, backyard chick caretakers, livestock technicians) + 15 technical experts (computer/electronics engineers, embedded practitioners, software developers, instructors). **Purposive sampling**; inclusion criteria + selection records documented; report *completed* counts, not the target; consent obtained before the survey.
+- **Survey respondents ≠ reference annotators.** The people rating acceptability do not produce the ground-truth labels. Reference annotators follow an **operational labeling guide**, annotate **independently** where possible, and resolve disagreements afterward (pair with S8's Cohen's κ step).
+- The performance dataset (frames, audio segments, control tests, observation hours) is **not** the 30 surveys — it is the time-stamped logs and records collected during bench verification and the brooding observation; report the achieved counts after collection.
 
 ---
 
