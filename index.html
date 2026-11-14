@@ -378,10 +378,17 @@
           <div class="chip" id="c-crowdwrap"><div class="k">crowding rule</div><div class="v" id="c-crowd">clear</div></div>
           <div class="chip" id="c-confwrap"><div class="k">cross-check conf</div><div class="v" id="c-conf">—</div></div>
         </div>
-        <div class="pilot-only"><div class="subheading">Room to grow <span>Sensors can wait</span></div><div class="sensor-list">
-          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-thermo"/></svg></span><span class="sensor-name">Floor temperature<small>DS18B20 array</small></span><span class="sensor-state">Not connected</span></div>
-          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-air"/></svg></span><span class="sensor-name">Air & humidity<small>DHT22</small></span><span class="sensor-state">Not connected</span></div>
-          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-leaf"/></svg></span><span class="sensor-name">Ammonia<small>MQ-137</small></span><span class="sensor-state">Not connected</span></div>
+        <div class="pilot-only"><div class="subheading">ESP32 Sensor Telemetry <span id="esp32-status-badge" class="esp32-badge" role="status" aria-atomic="true">ESP32 · WAITING</span></div><div class="esp32-grid">
+          <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-thermo"/></svg>Air Temp</span><strong id="esp32-temp-val" class="esp32-val">—</strong><small class="esp32-sub">DHT22 · GPIO 13</small></div>
+          <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-air"/></svg>Humidity</span><strong id="esp32-hum-val" class="esp32-val">—</strong><small class="esp32-sub">DHT22 · Relative RH</small></div>
+          <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-leaf"/></svg>Ammonia</span><strong id="esp32-nh3-val" class="esp32-val">—</strong><small id="esp32-nh3-sub" class="esp32-sub">MQ-137 · ADS1115 A0</small></div>
+          <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>Exhaust Fan</span><strong id="esp32-fan-val" class="esp32-val">—</strong><small class="esp32-sub">Relay · GPIO 33</small></div>
+        </div><div class="subheading">Brooder Mapping &amp; Hardware <span>Live sensor bus</span></div><div class="sensor-list">
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><span class="sensor-name">Box mapping<small>ArUco 4x4 (IDs 0–3) · NoIR cam</small></span><span id="sensor-aruco-state" class="sensor-state">Awaiting 4 corners</span></div>
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-thermo"/></svg></span><span class="sensor-name">Floor temperature<small>DS18B20 array</small></span><span id="sensor-floor-state" class="sensor-state">Not connected</span></div>
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-air"/></svg></span><span class="sensor-name">Air &amp; humidity<small>DHT22 · ESP32</small></span><span id="sensor-dht-state" class="sensor-state">Not connected</span></div>
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-leaf"/></svg></span><span class="sensor-name">Ammonia<small>MQ-137 · ADS1115</small></span><span id="sensor-mq-state" class="sensor-state">Not connected</span></div>
+          <div class="sensor-row"><span class="sensor-icon"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg></span><span class="sensor-name">Exhaust fan relay<small>ESP32 GPIO 33</small></span><span id="sensor-fan-state" class="sensor-state">Not connected</span></div>
         </div><div class="pilot-note"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><p><strong>Observe. Don’t actuate.</strong> Thermal inputs are not installed. Heater and fan control are not enabled in this interface.</p></div></div>
         <div id="crowdcard">
           <div class="ct">⚠ CROWDING ALARM — acknowledge required</div>
@@ -887,6 +894,28 @@ function drawBrooder() {
       vertex(x, -22 + Math.sin(x * 0.11 + sim.t * 0.02) * 1.2, 0);
     }
     endShape(); pop();
+  }
+  // ArUco corner fiducials (IDs 0, 1, 2, 3)
+  const arucoDetected = (window.PILOT_SAMPLE && window.PILOT_SAMPLE.vision && Array.isArray(window.PILOT_SAMPLE.vision.aruco_markers))
+    ? window.PILOT_SAMPLE.vision.aruco_markers : [];
+  for (const [id, ax, az] of [
+    [0, -half + 5, -half + 5],
+    [1,  half - 5, -half + 5],
+    [2, -half + 5,  half - 5],
+    [3,  half - 5,  half - 5],
+  ]) {
+    const on = arucoDetected.includes(id);
+    push();
+    translate(ax, -1.65, az);
+    strokeWeight(on ? 1.4 : 0.7);
+    stroke(on ? 96 : 118, on ? 175 : 112, on ? 110 : 96);
+    fill(on ? 236 : 220, on ? 245 : 212, on ? 224 : 190);
+    box(5.6, 0.35, 5.6);
+    noStroke();
+    fill(on ? 38 : 65, on ? 62 : 62, on ? 34 : 54);
+    translate(0, -0.15, 0);
+    box(3.0, 0.3, 3.0);
+    pop();
   }
   // heat lamp
   push(); translate(0, -52, 0); noStroke(); fill(45, 45, 52);
@@ -1616,6 +1645,8 @@ window.connectMQTT = function(url, opts) {
         if (d.kind === 'crowding') sim.crowdActive = d.data.active;
         if (d.kind === 'state_change' && d.data.state) sim.classState = d.data.state;
         if (d.kind === 'control_metrics' && window.ingestControlMetrics) window.ingestControlMetrics(d.data);
+      } else if (t.endsWith('telemetry/env')) {
+        if (window.ingestEsp32Sensors) window.ingestEsp32Sensors(d);
       } else if (t.endsWith('inference/window')) {
         if (d.state) sim.classState = d.state;
         if (isFinite(d.trim)) sim.trim = d.trim;

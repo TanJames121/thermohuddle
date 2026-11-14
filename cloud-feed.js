@@ -3,7 +3,8 @@ window.PILOT_CLOUD_URL = 'https://thoissoyiupjrrsqmika.supabase.co/storage/v1/ob
 window.cloudShouldPoll = (hidden, live, mqttFresh) => !hidden && live && !mqttFresh;
 window.cloudObservationOf = sample => ({ ts: sample.ts, seq: sample.seq, boot_id: sample.boot_id,
   count: sample.count, chicks: sample.chicks, cam_ok: sample.cam_ok, audio: sample.audio,
-  vision: sample.vision, assessment: sample.assessment });
+  vision: sample.vision, assessment: sample.assessment,
+  ...(sample.sensors ? { sensors: sample.sensors } : {}) });
 let cloudInFlight = false;
 if (location.protocol === 'https:') {
   document.getElementById('connchip').textContent = 'Connecting to cloud';

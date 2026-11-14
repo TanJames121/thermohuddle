@@ -15,6 +15,10 @@ const pilotAssessmentValid = assessment => !!assessment
   && ['abnormal_vocalization', 'healthy_vocalization', 'noise', 'unavailable'].includes(assessment.audio_support)
   && typeof assessment.reason === 'string' && assessment.reason.length <= 512
   && !/[\u0000-\u001f\u007f-\u009f]/.test(assessment.reason);
+const pilotSensorsValid = (sensors, now = Date.now()) => !!sensors && typeof sensors === 'object'
+  && !Array.isArray(sensors) && sensors.available === true
+  && ['ok', 'degraded', 'error'].includes(sensors.status)
+  && (!('ts' in sensors) || (Number.isFinite(sensors.ts) && now - sensors.ts * 1000 >= -5000 && now - sensors.ts * 1000 < 30000));
 
 window.pilotViewState = function (sample, now = Date.now()) {
   const timestamp = sample && Number.isFinite(sample.ts) ? sample.ts * 1000 : NaN;
@@ -59,8 +63,28 @@ window.pilotViewState = function (sample, now = Date.now()) {
   const distressDetail = distress
     ? `Audio model flags Unhealthy · uncalibrated. Possible distress or illness — check the brooder directly. Not an automated diagnosis; no equipment is triggered.`
     : '—';
+  const arucoMapped = cameraLive && detector && vision.aruco_mapped === true;
+  const arucoMarkers = cameraLive && detector && Array.isArray(vision.aruco_markers)
+    ? vision.aruco_markers.filter(id => [0, 1, 2, 3].includes(id))
+    : [];
+  const arucoLabel = arucoMapped ? `Mapped (${arucoMarkers.length}/4 IDs)`
+    : arucoMarkers.length > 0 ? `Partial (${arucoMarkers.length}/4 IDs)` : 'Awaiting 4 corners';
+  const sensors = sample && sample.sensors;
+  const sensorsLive = (fresh || (!!sensors && Number.isFinite(sensors.ts)
+    && now - sensors.ts * 1000 >= -5000 && now - sensors.ts * 1000 < 30000))
+    && pilotSensorsValid(sensors, now);
   return {
     fresh, cameraLive, micLive, detector, detectorModel: detector ? vision.model : null, classifierLive,
+    arucoMapped, arucoMarkers, arucoLabel,
+    sensorsLive,
+    sensorStatus: sensorsLive ? sensors.status : null,
+    ambientTempC: sensorsLive && pilotNumber(sensors.ambient_temp_c, -40, 125) ? sensors.ambient_temp_c : null,
+    humidityPct: sensorsLive && pilotNumber(sensors.humidity_pct, 0, 100) ? sensors.humidity_pct : null,
+    nh3Ppm: sensorsLive && pilotNumber(sensors.nh3_rel_ppm, 0, 10000) ? sensors.nh3_rel_ppm : null,
+    mqVolts: sensorsLive && pilotNumber(sensors.mq137_volts, -1, 10) ? sensors.mq137_volts : null,
+    mqRaw: sensorsLive && Number.isInteger(sensors.mq137_raw) ? sensors.mq137_raw : null,
+    mqAlert: sensorsLive && typeof sensors.mq137_do_alert === 'boolean' ? sensors.mq137_do_alert : false,
+    fanOn: sensorsLive && typeof sensors.fan_on === 'boolean' ? sensors.fan_on : null,
     age: Number.isFinite(age) ? Math.max(0, Math.floor(age / 1000)) : null,
     count, candidate, assessmentState: 'UNKNOWN', controlAllowed: false,
     distress, distressTitle, distressDetail,
@@ -84,8 +108,10 @@ window.ingestPilotSample = function (sample) {
   if (!sample || !Number.isFinite(sample.ts) || sample.ts * 1000 > Date.now() || typeof sample.cam_ok !== 'boolean') return;
   // Older packets and retained messages must not overwrite newer observations.
   if (window.PILOT_SAMPLE && sample.ts < window.PILOT_SAMPLE.ts) return;
-  window.PILOT_SAMPLE = sample;
-  const state = window.pilotViewState(sample);
+  const prevSensors = window.PILOT_SAMPLE && window.PILOT_SAMPLE.sensors;
+  const keepSensors = !sample.sensors && prevSensors && pilotSensorsValid(prevSensors, Date.now());
+  window.PILOT_SAMPLE = keepSensors ? { ...sample, sensors: prevSensors } : sample;
+  const state = window.pilotViewState(window.PILOT_SAMPLE);
   const key = `${sample.boot_id || ''}:${sample.seq || ''}:${sample.ts}`;
   if (state.micLive && key !== pilotLastKey) {
     pilotLastKey = key;
@@ -100,6 +126,35 @@ window.ingestPilotSample = function (sample) {
     }));
   }
   pilotLastPaint = 0;
+};
+
+window.ingestEsp32Sensors = function (raw, now = Date.now()) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+  const src = raw.sensors && typeof raw.sensors === 'object' ? raw.sensors : raw;
+  const ts = Number.isFinite(src.ts) ? src.ts : (Number.isFinite(raw.ts) ? raw.ts : now / 1000);
+  const status = ['ok', 'degraded', 'error'].includes(src.status) ? src.status : 'ok';
+  const temp = src.ambient_temp_c !== undefined ? src.ambient_temp_c : src.temp_air;
+  const hum = src.humidity_pct !== undefined ? src.humidity_pct : src.rh;
+  const nh3 = src.nh3_rel_ppm !== undefined ? src.nh3_rel_ppm : src.nh3_ppm;
+  const sensors = {
+    available: true,
+    status,
+    ts,
+    ambient_temp_c: pilotNumber(temp, -40, 125) ? temp : null,
+    humidity_pct: pilotNumber(hum, 0, 100) ? hum : null,
+    mq137_raw: Number.isInteger(src.mq137_raw) ? src.mq137_raw : null,
+    mq137_volts: pilotNumber(src.mq137_volts, -1, 10) ? src.mq137_volts : null,
+    nh3_rel_ppm: pilotNumber(nh3, 0, 10000) ? nh3 : null,
+    mq137_do_alert: typeof src.mq137_do_alert === 'boolean' ? src.mq137_do_alert : false,
+    fan_on: typeof src.fan_on === 'boolean' ? src.fan_on : false,
+  };
+  if (window.PILOT_SAMPLE && typeof window.PILOT_SAMPLE === 'object') {
+    window.PILOT_SAMPLE = { ...window.PILOT_SAMPLE, sensors };
+  } else {
+    window.PILOT_SAMPLE = { ts: 0, cam_ok: false, count: 0, chicks: [], sensors };
+  }
+  pilotLastPaint = 0;
+  if (typeof window.renderPilot === 'function') window.renderPilot();
 };
 
 window.renderPilot = function () {
@@ -144,6 +199,26 @@ window.renderPilot = function () {
   put('m-count', view.count === null ? '—' : view.count);
   put('m-cell', stats ? `${Math.round(stats.cellFrac * 100)}%` : '—');
   put('m-set', '—'); put('m-duty', 'Off'); put('m-nh3', '—');
+  const cls = (id, name, on) => { const e = document.getElementById(id); if (e && e.classList) e.classList.toggle(name, !!on); };
+  put('esp32-status-badge', view.sensorsLive ? (view.sensorStatus === 'ok' ? 'ESP32 · LIVE' : `ESP32 · ${view.sensorStatus.toUpperCase()}`) : 'ESP32 · WAITING');
+  put('esp32-temp-val', view.ambientTempC !== null ? `${view.ambientTempC.toFixed(1)} °C` : '—');
+  put('esp32-hum-val', view.humidityPct !== null ? `${view.humidityPct.toFixed(1)} %` : '—');
+  put('esp32-nh3-val', view.nh3Ppm !== null ? `${view.nh3Ppm.toFixed(2)} ppm` : '—');
+  put('esp32-nh3-sub', view.mqVolts !== null ? `ADS1115 ${view.mqVolts.toFixed(3)}V${view.mqAlert ? ' · DO ALERT' : ''}` : 'MQ-137 · ADS1115 A0');
+  put('esp32-fan-val', view.fanOn === null ? '—' : view.fanOn ? 'ON' : 'OFF');
+  put('sensor-aruco-state', view.arucoLabel);
+  put('sensor-dht-state', view.ambientTempC !== null && view.humidityPct !== null ? `${view.ambientTempC.toFixed(1)}°C · ${view.humidityPct.toFixed(0)}% RH` : view.sensorsLive ? 'Sensor degraded' : 'Not connected');
+  put('sensor-mq-state', view.nh3Ppm !== null ? `${view.nh3Ppm.toFixed(2)} ppm${view.mqAlert ? ' · ALERT' : ''}` : view.sensorsLive ? 'Sensor error' : 'Not connected');
+  put('sensor-fan-state', view.fanOn !== null ? (view.fanOn ? 'Relay ON' : 'Standby (OFF)') : 'Not connected');
+  cls('esp32-status-badge', 'live', view.sensorsLive && view.sensorStatus === 'ok');
+  cls('esp32-status-badge', 'warn', view.sensorsLive && view.sensorStatus !== 'ok');
+  cls('sensor-aruco-state', 'live', view.arucoMapped);
+  cls('sensor-aruco-state', 'warn', !view.arucoMapped && view.arucoMarkers.length > 0);
+  cls('sensor-dht-state', 'live', view.ambientTempC !== null);
+  cls('sensor-dht-state', 'warn', view.sensorsLive && view.ambientTempC === null);
+  cls('sensor-mq-state', 'live', view.nh3Ppm !== null && !view.mqAlert);
+  cls('sensor-mq-state', 'warn', view.mqAlert || (view.sensorsLive && view.nh3Ppm === null));
+  cls('sensor-fan-state', 'live', view.fanOn === true);
   document.getElementById('m-cellwrap').classList.remove('warn');
   document.getElementById('m-nh3').parentElement.classList.remove('warn');
   document.getElementById('crowdcard').classList.remove('show');

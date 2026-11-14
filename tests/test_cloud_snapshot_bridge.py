@@ -58,6 +58,42 @@ class SnapshotTests(unittest.TestCase):
             source[section]["heater_duty"] = 99
         self.assertEqual(bridge.sanitize(source, now=1700000001), expected)
 
+    def test_aruco_and_sensors_allowlist_and_rejection(self):
+        source = model_sample()
+        source["vision"]["aruco_mapped"] = True
+        source["vision"]["aruco_markers"] = [0, 1, 2, 3]
+        source["vision"]["aruco_corners"] = [[0.14, 0.15], [0.86, 0.15], [0.86, 0.85], [0.14, 0.85]]
+        source["sensors"] = {
+            "available": True,
+            "status": "ok",
+            "ts": 1700000000.0,
+            "ambient_temp_c": 31.4,
+            "humidity_pct": 62.5,
+            "mq137_raw": 1200,
+            "mq137_volts": 0.375,
+            "nh3_rel_ppm": 2.4,
+            "mq137_do_alert": False,
+            "fan_on": True,
+        }
+        expected = copy.deepcopy(source)
+        source["sensors"]["secret"] = "leak"
+        self.assertEqual(bridge.sanitize(source, now=1700000001), expected)
+
+        bad_markers = copy.deepcopy(expected)
+        bad_markers["vision"]["aruco_markers"] = [0, 9]
+        with self.assertRaises(ValueError):
+            bridge.sanitize(bad_markers, now=1700000001)
+
+        bad_temp = copy.deepcopy(expected)
+        bad_temp["sensors"]["ambient_temp_c"] = 120.0
+        with self.assertRaises(ValueError):
+            bridge.sanitize(bad_temp, now=1700000001)
+
+        missing_fan = copy.deepcopy(expected)
+        del missing_fan["sensors"]["fan_on"]
+        with self.assertRaises(ValueError):
+            bridge.sanitize(missing_fan, now=1700000001)
+
     def test_model_fields_reject_malformed_nonfinite_out_of_bounds_and_controls(self):
         invalid = {
             "vision": [

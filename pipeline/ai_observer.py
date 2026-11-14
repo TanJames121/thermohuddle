@@ -1,15 +1,41 @@
 """ThermoHuddle model observation packets. No fabricated thermal measurements."""
 
 
-def assemble_packet(vision, audio, assessment, *, now, seq, boot_id, cam_ok):
-    return {'v': 'ai-observer-1', 'boot_id': boot_id, 'seq': seq, 'ts': now,
-            'cam_ok': bool(cam_ok),
-            'count': vision['count'] if cam_ok else 0,
-            'chicks': vision['chicks'] if cam_ok else [],
-            'vision': vision.get('vision', {}),
-            'audio': audio or {'label': 'Unknown', 'available': False,
-                               'model': 'chicken-vocalization-classifier'},
-            'assessment': assessment}
+def assemble_packet(vision, audio, assessment, *, now, seq, boot_id, cam_ok, sensors=None):
+    packet = {'v': 'ai-observer-1', 'boot_id': boot_id, 'seq': seq, 'ts': now,
+              'cam_ok': bool(cam_ok),
+              'count': vision['count'] if cam_ok else 0,
+              'chicks': vision['chicks'] if cam_ok else [],
+              'vision': vision.get('vision', {}),
+              'audio': audio or {'label': 'Unknown', 'available': False,
+                                 'model': 'chicken-vocalization-classifier'},
+              'assessment': assessment}
+    if sensors is not None:
+        packet['sensors'] = sensors
+    return packet
+
+
+def _resolve_thesis_paths():
+    from pathlib import Path
+
+    repo_parent = Path(__file__).resolve().parents[2]
+    desktop_thesis = Path.home() / 'Desktop/Thesis'
+    if (repo_parent / 'thermohuddle_v3.py').is_file():
+        thesis_dir = repo_parent
+    elif (desktop_thesis / 'thermohuddle_v3.py').is_file():
+        thesis_dir = desktop_thesis
+    else:
+        thesis_dir = Path.home() / 'Thesis'
+
+    cam_model = thesis_dir / 'CameraModel/best.pt'
+    if not cam_model.is_file():
+        cam_model = Path.home() / 'CameraModel/best.pt'
+
+    audio_model = thesis_dir / 'Audiomodel/Chicken_CNN_Disease_Detection_Model.pth'
+    if not audio_model.is_file():
+        audio_model = Path.home() / 'Audiomodel/Chicken_CNN_Disease_Detection_Model.pth'
+
+    return thesis_dir, cam_model, audio_model
 
 
 def main():
@@ -29,12 +55,15 @@ def main():
     import numpy as np
     import cv2
 
+    thesis_dir, cam_model_path, audio_model_path = _resolve_thesis_paths()
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--frames', type=int, default=0, help='0: run continuously')
     parser.add_argument('--interval', type=float, default=5)
-    parser.add_argument('--output', type=Path, default=Path.home() / 'Thesis/tracking_latest.json')
-    parser.add_argument('--evidence', type=Path, default=Path.home() / 'Thesis/ai_observation')
+    parser.add_argument('--output', type=Path, default=thesis_dir / 'tracking_latest.json')
+    parser.add_argument('--evidence', type=Path, default=thesis_dir / 'ai_observation')
     parser.add_argument('--audio-device', default='snd_rpi_googlevoicehat_soundcar')
+    parser.add_argument('--serial-port', default=None, help='ESP32 serial device (auto-detect if omitted)')
     parser.add_argument('--no-mqtt', action='store_true')
     args = parser.parse_args()
     if args.frames < 0 or args.interval < .5 or not math.isfinite(args.interval):
@@ -42,15 +71,16 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.evidence.mkdir(parents=True, exist_ok=True)
-    lock = (Path.home() / 'Thesis/ai_observer.lock').open('w')
+    lock = (thesis_dir / 'ai_observer.lock').open('w')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     # Reuse hardware capture and telemetry only. Never instantiate old sensor/PID/control stubs.
-    sys.path.insert(0, str(Path.home() / 'Thesis'))
+    sys.path.insert(0, str(thesis_dir))
     from thermohuddle_v3 import Config, CameraSource, AudioMonitor, Telemetry
     from chicken_vision import ChickenVision
     from chicken_audio import ChickenAudioClassifier
     from comfort_observer import ComfortObserver
+    from esp32_sensor_bridge import ESP32SerialReader
 
     class RawMicrophone(AudioMonitor):
         def __init__(self, cfg):
@@ -81,15 +111,16 @@ def main():
     cfg = Config(audio_rate=48000, audio_device=args.audio_device, json_out=args.output,
                  boot_id=uuid.uuid4().hex[:12])
     telemetry = None if args.no_mqtt else Telemetry(cfg)
-    vision = ChickenVision(Path.home() / 'CameraModel/best.pt')
-    audio_model = ChickenAudioClassifier(Path.home() / 'Audiomodel/Chicken_CNN_Disease_Detection_Model.pth')
+    vision = ChickenVision(cam_model_path)
+    audio_model = ChickenAudioClassifier(audio_model_path)
     camera, microphone = CameraSource(cfg), RawMicrophone(cfg)
+    esp32 = ESP32SerialReader(port=args.serial_port)
     observer = ComfortObserver()
     stopping = threading.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: stopping.set())
-    logging.info('Observation-only AI started; camera backend=%s mic=%s; no actuator topics',
-                 camera.kind, microphone.ok)
+    logging.info('Observation-only AI started; camera backend=%s mic=%s esp32_port=%s; no actuator topics',
+                 camera.kind, microphone.ok, args.serial_port or 'auto')
     frames = 0
     try:
         # Give live input one complete classifier window; never pad missing live sound into a diagnosis.
@@ -98,7 +129,7 @@ def main():
             cycle = time.monotonic()
             captured_at = time.time()
             frame = camera.read()
-            detection = {'count': 0, 'chicks': [], 'vision': {'model': 'PoultryVision-YOLOv11m',
+            detection = {'count': 0, 'chicks': [], 'vision': {'model': 'ChickDetector-YOLOv8n',
                           'calibrated': False, 'coordinate_system': 'uncalibrated_camera'}}
             cam_ok = frame is not None
             if cam_ok:
@@ -124,9 +155,11 @@ def main():
                             audio['distress_ratio'] = round(float(spectrum[(freqs >= 2000) & (freqs <= 5000)].sum()) / (total + 1e-20), 4)
                 except Exception:
                     logging.exception('Audio inference failed; label remains Unknown')
+            sensors = esp32.latest(now=captured_at)
             assessment = observer.update(detection['chicks'] if cam_ok else [], audio, now=time.time())
             packet = assemble_packet(detection, audio, assessment, now=captured_at,
-                                     seq=frames + 1, boot_id=cfg.boot_id, cam_ok=cam_ok)
+                                     seq=frames + 1, boot_id=cfg.boot_id, cam_ok=cam_ok,
+                                     sensors=sensors)
             packet_tmp = args.output.with_suffix(args.output.suffix + '.partial')
             packet_tmp.write_text(json.dumps(packet, allow_nan=False) + '\n')
             os.replace(packet_tmp, args.output)
@@ -134,9 +167,19 @@ def main():
                 telemetry._publish('thermohuddle/inference/window', packet)
                 if audio.get('available'):
                     telemetry._publish('thermohuddle/telemetry/audio', audio)
+                if sensors is not None and sensors.get('available'):
+                    telemetry._publish('thermohuddle/telemetry/env', sensors)
             # Local evidence only, with no image publication or fabricated readings.
             if frame is not None:
                 annotated = frame.copy()
+                aruco_poly = detection.get('aruco_pixels') or []
+                if len(aruco_poly) == 4:
+                    pts_poly = np.array(aruco_poly, dtype=np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(annotated, [pts_poly], isClosed=True, color=(255, 220, 0), thickness=2)
+                for mid, (mx, my) in (detection.get('aruco_detected_pixels') or {}).items():
+                    cv2.circle(annotated, (int(mx), int(my)), 5, (0, 220, 255), -1)
+                    cv2.putText(annotated, f'[{mid}]', (int(mx) + 6, max(15, int(my) - 6)),
+                                cv2.FONT_HERSHEY_SIMPLEX, .45, (0, 220, 255), 1)
                 for x1, y1, x2, y2, confidence, cls in detection.get('boxes', []):
                     cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
                     cv2.putText(annotated, f'chicken {confidence:.2f}', (int(x1), max(15, int(y1))),
@@ -148,14 +191,17 @@ def main():
                     os.replace(image_tmp, args.evidence / 'frame_latest.jpg')
             with (args.evidence / 'observations.jsonl').open('a') as journal:
                 journal.write(json.dumps(packet, allow_nan=False) + '\n')
-            logging.info('seq=%d camera=%s chicken_detections=%d vision_ms=%s audio=%s probs=%s assessment=%s/%s',
-                         frames + 1, cam_ok, packet['count'], packet['vision'].get('inference_ms'),
-                         audio['label'], audio.get('probabilities'), assessment['state'], assessment['candidate'])
+            logging.info('seq=%d camera=%s chicken_detections=%d aruco=%s vision_ms=%s audio=%s esp32=%s assessment=%s/%s',
+                         frames + 1, cam_ok, packet['count'], detection.get('vision', {}).get('aruco_markers'),
+                         packet['vision'].get('inference_ms'),
+                         audio['label'], sensors['status'] if sensors else 'none',
+                         assessment['state'], assessment['candidate'])
             frames += 1
             if args.frames and frames >= args.frames:
                 break
             stopping.wait(max(0, args.interval - (time.monotonic() - cycle)))
     finally:
+        esp32.close()
         camera.close()
         microphone.close()
         if telemetry is not None and telemetry.client:

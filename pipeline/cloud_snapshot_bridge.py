@@ -36,6 +36,20 @@ def validate_model_sections(source, *, now):
                 or vision.get("coordinate_system") != "uncalibrated_camera"
                 or vision.get("calibrated") is not False):
             raise ValueError("invalid vision metadata")
+        if "aruco_mapped" in vision and type(vision["aruco_mapped"]) is not bool:
+            raise ValueError("invalid aruco_mapped flag")
+        if "aruco_markers" in vision:
+            markers = vision["aruco_markers"]
+            if (not isinstance(markers, list) or len(markers) > 4
+                    or any(type(m) is not int or not 0 <= m <= 3 for m in markers)):
+                raise ValueError("invalid aruco_markers")
+        if "aruco_corners" in vision:
+            corners = vision["aruco_corners"]
+            if (not isinstance(corners, list) or len(corners) not in (0, 4)
+                    or any(not isinstance(pt, list) or len(pt) != 2
+                           or not all(number(c, 0.0, 1.0) for c in pt)
+                           for pt in corners)):
+                raise ValueError("invalid aruco_corners")
     if "assessment" in source:
         assessment = source["assessment"]
         if (not isinstance(assessment, dict)
@@ -56,6 +70,23 @@ def validate_model_sections(source, *, now):
                 or len(assessment["reason"]) > 512
                 or any(not char.isprintable() for char in assessment["reason"])):
             raise ValueError("invalid assessment")
+    if "sensors" in source:
+        sensors = source["sensors"]
+        if (not isinstance(sensors, dict)
+                or type(sensors.get("available")) is not bool
+                or sensors.get("status") not in ("ok", "degraded", "error")
+                or not number(sensors.get("ts"), 0, now)
+                or (sensors.get("ambient_temp_c") is not None
+                    and not number(sensors.get("ambient_temp_c"), -40, 85))
+                or (sensors.get("humidity_pct") is not None
+                    and not number(sensors.get("humidity_pct"), 0, 100))
+                or type(sensors.get("mq137_raw")) is not int
+                or not -32768 <= sensors["mq137_raw"] <= 32767
+                or not number(sensors.get("mq137_volts"), -6.2, 6.2)
+                or not number(sensors.get("nh3_rel_ppm"), 0, 10000)
+                or type(sensors.get("mq137_do_alert")) is not bool
+                or type(sensors.get("fan_on")) is not bool):
+            raise ValueError("invalid sensors metadata")
     if "audio" in source:
         audio = source["audio"]  # Legacy audio is checked before this helper.
         if ("model" in audio and audio["model"] != "chicken-vocalization-classifier"
@@ -126,7 +157,11 @@ def sanitize(source, *, now):
                              if key in source["audio"]}
     for section, fields in (
             ("vision", ("model", "inference_ms", "confidence_min",
-                        "coordinate_system", "calibrated")),
+                        "coordinate_system", "calibrated",
+                        "aruco_mapped", "aruco_markers", "aruco_corners")),
+            ("sensors", ("available", "status", "ts", "ambient_temp_c",
+                         "humidity_pct", "mq137_raw", "mq137_volts",
+                         "nh3_rel_ppm", "mq137_do_alert", "fan_on")),
             ("assessment", ("state", "candidate", "pattern", "status", "reason",
                             "control_allowed", "window_s", "samples", "audio_support"))):
         if section in source:

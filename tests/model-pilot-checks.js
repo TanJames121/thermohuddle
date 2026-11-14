@@ -194,6 +194,69 @@ test('render toggles the distress card only from live classifier evidence', () =
   context.renderPilot();
   assert.equal(elements.get('distresscard').classList.contains('show'), false);
 });
+
+test('valid ArUco mapping and live ESP32 sensors surface without breaking pilot safety invariants', () => {
+  const input = sample();
+  input.vision.aruco_mapped = true;
+  input.vision.aruco_markers = [0, 1, 2, 3];
+  input.sensors = {
+    available: true,
+    status: 'ok',
+    ts: now / 1000,
+    ambient_temp_c: 31.4,
+    humidity_pct: 62.5,
+    mq137_raw: 1200,
+    mq137_volts: 0.375,
+    nh3_rel_ppm: 3.15,
+    mq137_do_alert: false,
+    fan_on: true,
+  };
+  const v = view(input);
+  assert.equal(v.arucoMapped, true);
+  assert.deepEqual(v.arucoMarkers, [0, 1, 2, 3]);
+  assert.equal(v.sensorsLive, true);
+  assert.equal(v.ambientTempC, 31.4);
+  assert.equal(v.humidityPct, 62.5);
+  assert.equal(v.nh3Ppm, 3.15);
+  assert.equal(v.fanOn, true);
+
+  input.ts = Date.now() / 1000;
+  input.audio.ts = input.ts;
+  input.sensors.ts = input.ts;
+  context.PILOT_SAMPLE = null;
+  context.ingestPilotSample(input);
+  context.renderPilot();
+  const text = id => elements.get(id).textContent;
+  assert.equal(text('m-set'), '—');
+  assert.equal(text('m-duty'), 'Off');
+  assert.equal(text('m-nh3'), '—');
+  assert.equal(text('esp32-status-badge'), 'ESP32 · LIVE');
+  assert.equal(text('esp32-temp-val'), '31.4 °C');
+  assert.equal(text('esp32-hum-val'), '62.5 %');
+  assert.equal(text('esp32-nh3-val'), '3.15 ppm');
+  assert.equal(text('esp32-fan-val'), 'ON');
+  assert.equal(text('sensor-aruco-state'), 'Mapped (4/4 IDs)');
+});
+
+test('standalone ESP32 MQTT payload updates telemetry cards safely', () => {
+  context.PILOT_SAMPLE = null;
+  context.ingestEsp32Sensors({
+    status: 'degraded',
+    ambient_temp_c: null,
+    humidity_pct: null,
+    mq137_raw: 910,
+    mq137_volts: 0.412,
+    nh3_rel_ppm: 1.85,
+    mq137_do_alert: false,
+    fan_on: false,
+  }, Date.now());
+  const text = id => elements.get(id).textContent;
+  assert.equal(text('esp32-status-badge'), 'ESP32 · DEGRADED');
+  assert.equal(text('esp32-temp-val'), '—');
+  assert.equal(text('esp32-nh3-val'), '1.85 ppm');
+  assert.equal(text('esp32-fan-val'), 'OFF');
+  assert.equal(context.pilotViewState(context.PILOT_SAMPLE, Date.now()).cameraLive, false);
+});
 // Execute the existing browser-independent freshness suite in the same VM.
 vm.runInContext(fs.readFileSync(path.join(__dirname, 'pilot-checks.js'), 'utf8'), context);
 console.log('existing pilot checks:', context.runPilotChecks());
