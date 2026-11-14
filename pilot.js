@@ -231,7 +231,17 @@ window.renderPilot = function () {
   cls('aruco-hud', 'warn', !view.arucoMapped && view.arucoMarkers.length > 0);
   cls('aruco-status-badge', 'live', view.arucoMapped);
   cls('aruco-status-badge', 'warn', !view.arucoMapped && view.arucoMarkers.length > 0);
-  for (const id of [0, 1, 2, 3]) cls(`aruco-tag-${id}`, 'live', view.arucoMarkers.includes(id));
+  const arucoTags = [
+    [0, 'TL', '(-50,-50)'],
+    [1, 'TR', '(+50,-50)'],
+    [2, 'BL', '(-50,+50)'],
+    [3, 'BR', '(+50,+50)'],
+  ];
+  for (const [id, corner, coords] of arucoTags) {
+    const detected = view.arucoMarkers.includes(id);
+    cls(`aruco-tag-${id}`, 'live', detected);
+    put(`aruco-tag-${id}`, detected ? `ID ${id} · ${corner} · ✓ DETECTED` : `ID ${id} · ${corner} ${coords}`);
+  }
   const pts = view.cameraLive && window.PILOT_SAMPLE && Array.isArray(window.PILOT_SAMPLE.chicks)
     ? window.PILOT_SAMPLE.chicks : [];
   let closePairs = 0;

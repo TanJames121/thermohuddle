@@ -113,14 +113,24 @@ def main():
     telemetry = None if args.no_mqtt else Telemetry(cfg)
     vision = ChickenVision(cam_model_path)
     audio_model = ChickenAudioClassifier(audio_model_path)
-    camera, microphone = CameraSource(cfg), RawMicrophone(cfg)
+    def open_camera():
+        """Open camera without aborting audio/ESP32 observation if disconnected."""
+        try:
+            return CameraSource(cfg)
+        except Exception as exc:
+            logging.warning('Camera unavailable; continuing audio/ESP32 only and retrying in 10s (%s)', exc)
+            return None
+
+    camera = open_camera()
+    last_cam_retry = time.monotonic()
+    microphone = RawMicrophone(cfg)
     esp32 = ESP32SerialReader(port=args.serial_port)
     observer = ComfortObserver()
     stopping = threading.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: stopping.set())
     logging.info('Observation-only AI started; camera backend=%s mic=%s esp32_port=%s; no actuator topics',
-                 camera.kind, microphone.ok, args.serial_port or 'auto')
+                 camera.kind if camera else 'waiting', microphone.ok, args.serial_port or 'auto')
     frames = 0
     try:
         # Give live input one complete classifier window; never pad missing live sound into a diagnosis.
@@ -128,7 +138,23 @@ def main():
         while not stopping.is_set() and (not args.frames or frames < args.frames):
             cycle = time.monotonic()
             captured_at = time.time()
-            frame = camera.read()
+            if camera is None and cycle - last_cam_retry >= 10.0:
+                last_cam_retry = cycle
+                camera = open_camera()
+                if camera is not None:
+                    logging.info('Camera connected; backend=%s', camera.kind)
+            frame = None
+            if camera is not None:
+                try:
+                    frame = camera.read()
+                except Exception as exc:
+                    logging.warning('Camera read failed (%s); resetting camera for retry', exc)
+                    try:
+                        camera.close()
+                    except Exception:
+                        pass
+                    camera = None
+                    last_cam_retry = cycle
             detection = {'count': 0, 'chicks': [], 'vision': {'model': 'ChickDetector-YOLOv8n',
                           'calibrated': False, 'coordinate_system': 'uncalibrated_camera'}}
             cam_ok = frame is not None
@@ -215,7 +241,8 @@ def main():
             stopping.wait(max(0, args.interval - (time.monotonic() - cycle)))
     finally:
         esp32.close()
-        camera.close()
+        if camera is not None:
+            camera.close()
         microphone.close()
         if telemetry is not None and telemetry.client:
             telemetry.client.loop_stop()

@@ -1,5 +1,5 @@
 /* ThermoHuddle service worker — offline model-aware observation-only shell. */
-const CACHE = 'thermohuddle-v21';
+const CACHE = 'thermohuddle-v22';
 const ASSETS = [
   './index.html',
   './brooder.css',
@@ -17,7 +17,7 @@ const ASSETS = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(ASSETS))
+      .then((c) => Promise.all(ASSETS.map((u) => c.add(new Request(u, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
