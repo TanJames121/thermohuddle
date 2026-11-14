@@ -16,14 +16,22 @@ ThermoHuddle/
 ├── broker.js.example / mosquitto.conf.example
 ├── README.md
 ├── docs/
+│   ├── ArUco_ESP32_Integration_Guide.md ← ArUco floor mapping & ESP32→Pi→WebUI guide
 │   ├── ThermoHuddle_Overview.md        ← what it is + how features work
 │   ├── ThermoHuddle_Build_Guide.md     ← this file
 │   └── design/                         ← FigCraft design files (historical)
-└── pipeline/
-    ├── thermohuddle_draft_v2.py        ← Pi pipeline draft (31 unit checks)
-    └── test_broker_ws.py               ← demo MQTT broker (zero-hardware demo)
+├── pipeline/
+│   ├── ai_observer.py                  ← Raspberry Pi camera/audio/ESP32 observer loop
+│   ├── chicken_vision.py               ← YOLO detector + ArUco (IDs 0–3) homography mapper
+│   ├── chicken_audio.py                ← CNN vocalization classifier
+│   ├── esp32_sensor_bridge.py          ← ESP32 USB-serial & MQTT telemetry bridge
+│   ├── cloud_snapshot_bridge.py        ← sanitized Supabase public telemetry publisher
+│   ├── thermohuddle_draft_v2.py        ← Pi pipeline draft (31 unit checks)
+│   └── test_broker_ws.py               ← demo MQTT broker (zero-hardware demo)
 └── firmware/
-    └── esp32_tests/                    ← ESP32 sensor bench tests (01–05) + README
+    ├── Online-ArUco-marker-sheet-generator.pdf ← printable DICT_4X4_50 markers (0–3)
+    ├── ThermohaddleDht22Mq_nov13a/             ← ESP32 DHT22 + MQ-137 (ADS1115) + relay sketch
+    └── esp32_tests/                            ← ESP32 sensor bench tests (01–05) + README
 ```
 
 ---
