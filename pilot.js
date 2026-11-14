@@ -219,6 +219,43 @@ window.renderPilot = function () {
   cls('sensor-mq-state', 'live', view.nh3Ppm !== null && !view.mqAlert);
   cls('sensor-mq-state', 'warn', view.mqAlert || (view.sensorsLive && view.nh3Ppm === null));
   cls('sensor-fan-state', 'live', view.fanOn === true);
+  put('aruco-hud-text', view.arucoMapped
+    ? 'ARUCO 4×4 · BOX MAPPED (4/4 CORNERS)'
+    : view.arucoMarkers.length > 0
+      ? `ARUCO 4×4 · PARTIAL (${view.arucoMarkers.length}/4 CORNERS)`
+      : 'ARUCO 4×4 · AWAITING CORNERS [0–3]');
+  put('aruco-status-badge', view.arucoMapped
+    ? 'HOMOGRAPHY LOCKED'
+    : view.arucoMarkers.length > 0 ? `PARTIAL ${view.arucoMarkers.length}/4` : 'AWAITING TAGS');
+  cls('aruco-hud', 'live', view.arucoMapped);
+  cls('aruco-hud', 'warn', !view.arucoMapped && view.arucoMarkers.length > 0);
+  cls('aruco-status-badge', 'live', view.arucoMapped);
+  cls('aruco-status-badge', 'warn', !view.arucoMapped && view.arucoMarkers.length > 0);
+  for (const id of [0, 1, 2, 3]) cls(`aruco-tag-${id}`, 'live', view.arucoMarkers.includes(id));
+  const pts = view.cameraLive && window.PILOT_SAMPLE && Array.isArray(window.PILOT_SAMPLE.chicks)
+    ? window.PILOT_SAMPLE.chicks : [];
+  let closePairs = 0;
+  const clusteredSet = new Set();
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      if (Array.isArray(pts[i]) && Array.isArray(pts[j]) && pts[i].length === 2 && pts[j].length === 2) {
+        if (Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]) < 14) {
+          closePairs++;
+          clusteredSet.add(i);
+          clusteredSet.add(j);
+        }
+      }
+    }
+  }
+  const clumpState = !view.cameraLive || pts.length === 0 ? 'Waiting'
+    : pts.length < 2 ? 'Single bird'
+    : closePairs >= Math.max(2, Math.floor(pts.length * 0.45)) || (stats && stats.clarkEvans < 0.72) ? 'CLUMPING'
+    : closePairs > 0 ? 'MODERATE' : 'DISPERSED';
+  put('clump-state-val', clumpState);
+  cls('clump-state-val', 'warn', clumpState === 'CLUMPING');
+  cls('clump-state-val', 'live', clumpState === 'DISPERSED');
+  put('clump-pairs-val', view.cameraLive && pts.length > 1 ? `${closePairs} (${clusteredSet.size}/${pts.length})` : '—');
+  put('clump-nnd-val', stats ? `${stats.nnd.toFixed(1)} · R=${stats.clarkEvans.toFixed(2)}` : '—');
   document.getElementById('m-cellwrap').classList.remove('warn');
   document.getElementById('m-nh3').parentElement.classList.remove('warn');
   document.getElementById('crowdcard').classList.remove('show');

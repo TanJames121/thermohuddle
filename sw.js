@@ -1,5 +1,5 @@
 /* ThermoHuddle service worker — offline model-aware observation-only shell. */
-const CACHE = 'thermohuddle-v19';
+const CACHE = 'thermohuddle-v21';
 const ASSETS = [
   './index.html',
   './brooder.css',
@@ -61,7 +61,23 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // app shell: cache-first; offline + cache-miss on a navigation → serve the
+  // app shell: network-first for code/HTML so UI updates appear immediately, falling back to cache offline
+  if (e.request.mode === 'navigate' || /\.(html|js|css)$/.test(url.pathname) || url.pathname.endsWith('/')) {
+    e.respondWith(
+      fetch(e.request)
+        .then((r) => {
+          const cp = r.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, cp));
+          return r;
+        })
+        .catch(() => caches.match(e.request, { ignoreSearch: true })
+          .then((hit) => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined))
+          .then((res) => res || Response.error()))
+    );
+    return;
+  }
+
+  // static icons / vendor assets: cache-first with offline navigation fallback
   // cached app shell so the app still opens with the server completely gone
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(

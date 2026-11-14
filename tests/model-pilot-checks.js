@@ -236,6 +236,18 @@ test('valid ArUco mapping and live ESP32 sensors surface without breaking pilot 
   assert.equal(text('esp32-nh3-val'), '3.15 ppm');
   assert.equal(text('esp32-fan-val'), 'ON');
   assert.equal(text('sensor-aruco-state'), 'Mapped (4/4 IDs)');
+  assert.equal(text('aruco-hud-text'), 'ARUCO 4×4 · BOX MAPPED (4/4 CORNERS)');
+  assert.equal(text('aruco-status-badge'), 'HOMOGRAPHY LOCKED');
+  for (const id of [0, 1, 2, 3]) {
+    assert.equal(elements.get(`aruco-tag-${id}`).classList.contains('live'), true);
+  }
+  input.chicks = [[0, 0], [3, 4], [2, 1], [-1, 2]];
+  input.count = 4;
+  context.PILOT_SAMPLE = null;
+  context.ingestPilotSample(input);
+  context.renderPilot();
+  assert.equal(text('clump-state-val'), 'CLUMPING');
+  assert.equal(text('clump-pairs-val'), '6 (4/4)');
 });
 
 test('standalone ESP32 MQTT payload updates telemetry cards safely', () => {

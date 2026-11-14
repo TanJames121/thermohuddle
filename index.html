@@ -344,6 +344,7 @@
       <button class="vpb" id="btndark" type="button" aria-label="Toggle dark theme" aria-pressed="false" title="Toggle dark theme"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
       <button class="vpb" id="btnsnap" type="button" aria-label="Save spatial view as PNG" title="Save spatial view"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
     </div>
+    <div id="aruco-hud" class="aruco-hud" role="status" aria-live="polite"><span id="aruco-hud-text">ARUCO 4×4 · AWAITING CORNERS [0–3]</span></div>
     <div class="viewport-bottom"><span class="view-key"><i></i> Motion regions</span><span class="coordinates">SPATIAL RECONSTRUCTION<br>NOT A LIVE VIDEO FEED</span></div>
   </div>
     <div class="observation-caption"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="observation-note">Camera-derived positions, not live video. Drag to orbit; scroll to zoom.</span></div>
@@ -378,7 +379,16 @@
           <div class="chip" id="c-crowdwrap"><div class="k">crowding rule</div><div class="v" id="c-crowd">clear</div></div>
           <div class="chip" id="c-confwrap"><div class="k">cross-check conf</div><div class="v" id="c-conf">—</div></div>
         </div>
-        <div class="pilot-only"><div class="subheading">ESP32 Sensor Telemetry <span id="esp32-status-badge" class="esp32-badge" role="status" aria-atomic="true">ESP32 · WAITING</span></div><div class="esp32-grid">
+        <div class="pilot-only"><div class="subheading">ArUco Floor Mapping &amp; Clumping <span id="aruco-status-badge" class="esp32-badge" role="status" aria-atomic="true">AWAITING TAGS</span></div><div class="aruco-corners-grid">
+          <span id="aruco-tag-0" class="aruco-pill">ID 0 · TL (-50,-50)</span>
+          <span id="aruco-tag-1" class="aruco-pill">ID 1 · TR (+50,-50)</span>
+          <span id="aruco-tag-2" class="aruco-pill">ID 2 · BL (-50,+50)</span>
+          <span id="aruco-tag-3" class="aruco-pill">ID 3 · BR (+50,+50)</span>
+        </div><div id="clump-summary-card" class="clump-strip">
+          <div class="clump-cell"><span class="clump-k">Flock Clumping</span><strong id="clump-state-val" class="clump-v">Waiting</strong></div>
+          <div class="clump-cell"><span class="clump-k">Close Pairs (&lt;14u)</span><strong id="clump-pairs-val" class="clump-v">—</strong></div>
+          <div class="clump-cell"><span class="clump-k">NND / Clark R</span><strong id="clump-nnd-val" class="clump-v">—</strong></div>
+        </div><div class="subheading">ESP32 Sensor Telemetry <span id="esp32-status-badge" class="esp32-badge" role="status" aria-atomic="true">ESP32 · WAITING</span></div><div class="esp32-grid">
           <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-thermo"/></svg>Air Temp</span><strong id="esp32-temp-val" class="esp32-val">—</strong><small class="esp32-sub">DHT22 · GPIO 13</small></div>
           <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-air"/></svg>Humidity</span><strong id="esp32-hum-val" class="esp32-val">—</strong><small class="esp32-sub">DHT22 · Relative RH</small></div>
           <div class="esp32-card"><span class="esp32-label"><svg class="icon" aria-hidden="true"><use href="#i-leaf"/></svg>Ammonia</span><strong id="esp32-nh3-val" class="esp32-val">—</strong><small id="esp32-nh3-sub" class="esp32-sub">MQ-137 · ADS1115 A0</small></div>
@@ -648,9 +658,16 @@ class Chick {
   }
   display() { drawChickBody(this.pos.x, this.pos.z, '#fffdf4', '#e8c99a'); }
 }
-function drawDot(x, z) {
-  push(); translate(x, -2.5, z); noStroke(); fill('#f7d993');
-  sphere(1.1, 5, 3); pop();
+function drawDot(x, z, clumped = false) {
+  push();
+  translate(x, -1.45, z);
+  rotateX(HALF_PI);
+  noFill();
+  stroke(clumped ? 238 : 110, clumped ? 128 : 196, clumped ? 72 : 122);
+  strokeWeight(1.3);
+  circle(0, 0, 4.6);
+  pop();
+  drawChickBody(x, z, clumped ? '#ffe6cc' : '#fffdf4', clumped ? '#e07b42' : '#d8b77e');
 }
 function drawChickBody(x, z, bodyCol, beakCol) {
   push();
@@ -844,11 +861,22 @@ function draw() {
   const isLive = sim.forced === 'LIVE';
   if (isLive) {
     if (window.pilotViewState(window.PILOT_SAMPLE).cameraLive) {
-      for (const d of liveDots) drawDot(d.x, d.z);
       // blur/occlusion flicker: keep last-seen positions visible ~12 s
       const holdAge = Date.now() - liveDotsHoldTs;
-      if (!liveDots.length && liveDotsHold.length && holdAge < 12000)
-        for (const d of liveDotsHold) drawDot(d.x, d.z);
+      const activeDots = liveDots.length ? liveDots
+        : (liveDotsHold.length && holdAge < 12000 ? liveDotsHold : []);
+      const clumped = new Set();
+      stroke(238, 128, 72); strokeWeight(1.6); noFill();
+      for (let i = 0; i < activeDots.length; i++) {
+        for (let j = i + 1; j < activeDots.length; j++) {
+          const d = Math.hypot(activeDots[i].x - activeDots[j].x, activeDots[i].z - activeDots[j].z);
+          if (d < 14) {
+            clumped.add(i); clumped.add(j);
+            line(activeDots[i].x, -1.35, activeDots[i].z, activeDots[j].x, -1.35, activeDots[j].z);
+          }
+        }
+      }
+      for (let i = 0; i < activeDots.length; i++) drawDot(activeDots[i].x, activeDots[i].z, clumped.has(i));
     }
   }
   else { drawCrowdPulse(isLive); for (const c of chicks) c.display(); }
@@ -915,6 +943,16 @@ function drawBrooder() {
     fill(on ? 38 : 65, on ? 62 : 62, on ? 34 : 54);
     translate(0, -0.15, 0);
     box(3.0, 0.3, 3.0);
+    pop();
+  }
+  if (arucoDetected.length === 4 || (window.PILOT_SAMPLE && window.PILOT_SAMPLE.vision && window.PILOT_SAMPLE.vision.aruco_mapped)) {
+    push();
+    stroke(96, 175, 110); strokeWeight(1.8); noFill();
+    const b = half - 5;
+    line(-b, -1.5, -b,  b, -1.5, -b);
+    line( b, -1.5, -b,  b, -1.5,  b);
+    line( b, -1.5,  b, -b, -1.5,  b);
+    line(-b, -1.5,  b, -b, -1.5, -b);
     pop();
   }
   // heat lamp

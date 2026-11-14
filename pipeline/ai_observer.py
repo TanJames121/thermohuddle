@@ -175,15 +175,28 @@ def main():
                 aruco_poly = detection.get('aruco_pixels') or []
                 if len(aruco_poly) == 4:
                     pts_poly = np.array(aruco_poly, dtype=np.int32).reshape((-1, 1, 2))
-                    cv2.polylines(annotated, [pts_poly], isClosed=True, color=(255, 220, 0), thickness=2)
+                    cv2.polylines(annotated, [pts_poly], isClosed=True, color=(90, 225, 110), thickness=2)
                 for mid, (mx, my) in (detection.get('aruco_detected_pixels') or {}).items():
                     cv2.circle(annotated, (int(mx), int(my)), 5, (0, 220, 255), -1)
-                    cv2.putText(annotated, f'[{mid}]', (int(mx) + 6, max(15, int(my) - 6)),
+                    cv2.putText(annotated, f'ID:{mid}', (int(mx) + 6, max(15, int(my) - 6)),
                                 cv2.FONT_HERSHEY_SIMPLEX, .45, (0, 220, 255), 1)
-                for x1, y1, x2, y2, confidence, cls in detection.get('boxes', []):
-                    cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-                    cv2.putText(annotated, f'chicken {confidence:.2f}', (int(x1), max(15, int(y1))),
-                                cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 0), 1)
+                raw_boxes = detection.get('boxes', [])
+                box_centers = [(int((x1 + x2) / 2), int((y1 + y2) / 2)) for x1, y1, x2, y2, *_ in raw_boxes]
+                clump_thresh = 0.14 * min(frame.shape[:2])
+                clumped_idxs = set()
+                for i in range(len(box_centers)):
+                    for j in range(i + 1, len(box_centers)):
+                        if math.hypot(box_centers[i][0] - box_centers[j][0],
+                                      box_centers[i][1] - box_centers[j][1]) < clump_thresh:
+                            clumped_idxs.add(i)
+                            clumped_idxs.add(j)
+                            cv2.line(annotated, box_centers[i], box_centers[j], (65, 160, 255), 2)
+                for idx, (x1, y1, x2, y2, confidence, cls) in enumerate(raw_boxes):
+                    color = (65, 160, 255) if idx in clumped_idxs else (90, 225, 110)
+                    cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+                    cv2.circle(annotated, box_centers[idx], 4, color, -1)
+                    cv2.putText(annotated, f'#{idx + 1} {confidence:.2f}', (int(x1), max(15, int(y1) - 4)),
+                                cv2.FONT_HERSHEY_SIMPLEX, .45, color, 1)
                 image_tmp = args.evidence / 'frame_latest.partial.jpg'
                 if not cv2.imwrite(str(image_tmp), annotated):
                     logging.warning('Could not save local camera evidence')
