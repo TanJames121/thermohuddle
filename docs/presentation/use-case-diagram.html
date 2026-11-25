@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ThermoHuddle — System Use Case Diagram</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --card: #121a29;
+    --card-border: #263249;
+    --ink: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #f97316;
+    --green: #22c55e;
+    --blue: #38bdf8;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --violet: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 1600px;
+    height: 1000px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  .canvas {
+    width: 1600px;
+    height: 1000px;
+    padding: 28px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background:
+      radial-gradient(900px 440px at 14% 8%, rgba(249, 115, 22, 0.11), transparent 64%),
+      radial-gradient(760px 420px at 86% 14%, rgba(34, 197, 94, 0.08), transparent 64%),
+      var(--bg);
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 12px;
+  }
+  .eyebrow {
+    font: 600 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .legend {
+    display: flex;
+    gap: 14px;
+    font: 500 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+    color: var(--muted);
+  }
+  .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+  }
+  svg {
+    width: 100%;
+    height: 855px;
+    display: block;
+  }
+  .boundary {
+    fill: rgba(18, 26, 41, 0.86);
+    stroke: #334155;
+    stroke-width: 2;
+    rx: 22;
+  }
+  .boundary-title {
+    font-size: 16px;
+    font-weight: 700;
+    fill: #f8fafc;
+    letter-spacing: 0.3px;
+  }
+  .boundary-sub {
+    font: 500 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+    fill: #94a3b8;
+  }
+  .conn {
+    fill: none;
+    stroke: #64748b;
+    stroke-width: 1.7;
+  }
+  .conn-sys {
+    fill: none;
+    stroke: #38bdf8;
+    stroke-width: 1.7;
+    opacity: 0.72;
+  }
+  .conn-safety {
+    fill: none;
+    stroke: #ef4444;
+    stroke-width: 1.8;
+    stroke-dasharray: 6 4;
+  }
+  .conn-include {
+    fill: none;
+    stroke: #f59e0b;
+    stroke-width: 1.7;
+    stroke-dasharray: 6 4;
+  }
+  .uc-box {
+    stroke-width: 1.6;
+    rx: 28;
+  }
+  .uc-obs { fill: #14263c; stroke: #38bdf8; }
+  .uc-ctrl { fill: #261b14; stroke: #f97316; }
+  .uc-safe { fill: #2b151a; stroke: #ef4444; }
+  .uc-eval { fill: #142921; stroke: #22c55e; }
+  .uc-id {
+    font: 700 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+    fill: #94a3b8;
+  }
+  .uc-title {
+    font-size: 14px;
+    font-weight: 700;
+    fill: #f8fafc;
+  }
+  .uc-sub {
+    font-size: 11.5px;
+    fill: #cbd5e1;
+  }
+  .actor-card {
+    fill: #151e30;
+    stroke: #334155;
+    stroke-width: 1.5;
+    rx: 16;
+  }
+  .actor-title {
+    font-size: 14px;
+    font-weight: 700;
+    fill: #f8fafc;
+  }
+  .actor-sub {
+    font-size: 11.5px;
+    fill: #94a3b8;
+  }
+  .stereo {
+    font: 600 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+    fill: #f59e0b;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <header>
+    <div>
+      <div class="eyebrow">CpE 404 Capstone · Behavioral &amp; Systems Architecture</div>
+      <h1>ThermoHuddle — UML Use Case Diagram</h1>
+    </div>
+    <div class="legend">
+      <div class="leg-item"><span class="swatch" style="background:#38bdf8"></span>Observation &amp; Sensing</div>
+      <div class="leg-item"><span class="swatch" style="background:#f97316"></span>Thermal Control &amp; Cloud</div>
+      <div class="leg-item"><span class="swatch" style="background:#ef4444"></span>Deterministic Safety</div>
+      <div class="leg-item"><span class="swatch" style="background:#22c55e"></span>Analytics &amp; Demo</div>
+    </div>
+  </header>
+
+  <svg viewBox="0 0 1528 855" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+      </marker>
+      <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+      </marker>
+      <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
+      </marker>
+      <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#ef4444" />
+      </marker>
+    </defs>
+
+    <!-- System Boundary -->
+    <rect x="310" y="14" width="905" height="825" class="boundary" />
+    <text x="342" y="48" class="boundary-title">ThermoHuddle Edge AI Brooder &amp; PWA Dashboard</text>
+    <text x="342" y="69" class="boundary-sub">Raspberry Pi 5 (th-sensord · th-visiond · th-audiod · th-brain · th-uplink) + ESP32 + WebUI</text>
+
+    <!-- Connectors (drawn behind nodes) -->
+    <!-- Farmer left associations -->
+    <path d="M 248 220 L 352 135" class="conn" />
+    <path d="M 248 232 L 352 245" class="conn" />
+    <path d="M 248 245 L 352 355" class="conn" />
+    <path d="M 248 258 L 352 465" class="conn" />
+    <path d="M 248 272 L 352 575" class="conn-safety" marker-end="url(#arrow-red)" />
+
+    <!-- Researcher left associations -->
+    <path d="M 248 615 L 352 145" class="conn" />
+    <path d="M 248 632 L 352 685" class="conn" />
+    <path d="M 248 648 L 352 780" class="conn" />
+
+    <!-- Include / Extend relationships inside boundary -->
+    <path d="M 730 575 L 820 575" class="conn-include" marker-end="url(#arrow-amber)" />
+    <text x="742" y="562" class="stereo">&lt;&lt;include&gt;&gt;</text>
+
+    <path d="M 730 135 L 820 135" class="conn-include" marker-end="url(#arrow-amber)" />
+    <text x="742" y="122" class="stereo">&lt;&lt;include&gt;&gt;</text>
+
+    <path d="M 1005 408 L 1005 538" class="conn-include" marker-end="url(#arrow-amber)" />
+    <text x="1016" y="476" class="stereo">&lt;&lt;include&gt;&gt;</text>
+
+    <!-- Secondary Actors Right associations -->
+    <path d="M 1278 165 L 1180 135" class="conn-sys" marker-end="url(#arrow-blue)" />
+    <path d="M 1278 180 L 1180 245" class="conn-sys" marker-end="url(#arrow-blue)" />
+    <path d="M 1278 195 L 1180 355" class="conn-sys" marker-end="url(#arrow-blue)" />
+
+    <path d="M 1278 440 L 730 465" class="conn-sys" marker-end="url(#arrow-blue)" />
+    <path d="M 1278 460 L 1180 575" class="conn-safety" marker-end="url(#arrow-red)" />
+
+    <path d="M 1180 695 L 1278 695" class="conn-sys" marker-end="url(#arrow-blue)" />
+    <path d="M 730 685 L 1278 708" class="conn" />
+
+    <!-- Left Actor 1: Poultry Caretaker / Farmer -->
+    <g transform="translate(20, 155)">
+      <rect x="0" y="0" width="228" height="162" class="actor-card" />
+      <circle cx="114" cy="36" r="14" fill="none" stroke="#f97316" stroke-width="2.4" />
+      <path d="M 114 50 L 114 82 M 94 62 L 134 62 M 114 82 L 98 104 M 114 82 L 130 104" stroke="#f97316" stroke-width="2.4" fill="none" stroke-linecap="round" />
+      <text x="114" y="128" text-anchor="middle" class="actor-title">Poultry Caretaker</text>
+      <text x="114" y="147" text-anchor="middle" class="actor-sub">Primary Operator · Farm</text>
+    </g>
+
+    <!-- Left Actor 2: Researcher / Capstone Evaluator -->
+    <g transform="translate(20, 545)">
+      <rect x="0" y="0" width="228" height="162" class="actor-card" />
+      <circle cx="114" cy="36" r="14" fill="none" stroke="#22c55e" stroke-width="2.4" />
+      <path d="M 114 50 L 114 82 M 94 62 L 134 62 M 114 82 L 98 104 M 114 82 L 130 104" stroke="#22c55e" stroke-width="2.4" fill="none" stroke-linecap="round" />
+      <text x="114" y="128" text-anchor="middle" class="actor-title">Capstone Researcher</text>
+      <text x="114" y="147" text-anchor="middle" class="actor-sub">Validation &amp; Chapter 4 Eval</text>
+    </g>
+
+    <!-- Left Column Use Cases (x=352, width=378, height=78) -->
+    <g transform="translate(352, 96)">
+      <rect width="378" height="78" class="uc-box uc-obs" />
+      <text x="24" y="26" class="uc-id">UC-01 · SPATIAL DISPERSION</text>
+      <text x="24" y="47" class="uc-title">Monitor 3D Flock Positions &amp; Clumping</text>
+      <text x="24" y="64" class="uc-sub">NND, Shannon Entropy, Clark-Evans R, Max-Cell %</text>
+    </g>
+
+    <g transform="translate(352, 206)">
+      <rect width="378" height="78" class="uc-box uc-obs" />
+      <text x="24" y="26" class="uc-id">UC-02 · ACOUSTIC MONITOR</text>
+      <text x="24" y="47" class="uc-title">Inspect Vocalization Level &amp; Distress</text>
+      <text x="24" y="64" class="uc-sub">dBFS bar history, peak Hz, Healthy/Noise/Unhealthy</text>
+    </g>
+
+    <g transform="translate(352, 316)">
+      <rect width="378" height="78" class="uc-box uc-obs" />
+      <text x="24" y="26" class="uc-id">UC-03 · FLOOR CALIBRATION</text>
+      <text x="24" y="47" class="uc-title">Verify 4-Corner ArUco Homography</text>
+      <text x="24" y="64" class="uc-sub">IDs 0–3 lock status &amp; perspective floor mapping</text>
+    </g>
+
+    <g transform="translate(352, 426)">
+      <rect width="378" height="78" class="uc-box uc-obs" />
+      <text x="24" y="26" class="uc-id">UC-04 · ENVIRONMENT TELEMETRY</text>
+      <text x="24" y="47" class="uc-title">Monitor Air Temp, RH &amp; Relative NH₃</text>
+      <text x="24" y="64" class="uc-sub">ESP32 DHT22, MQ-137 ADS1115 &amp; exhaust fan state</text>
+    </g>
+
+    <g transform="translate(352, 536)">
+      <rect width="378" height="78" class="uc-box uc-safe" />
+      <text x="24" y="26" class="uc-id">UC-05 · WELFARE INTERVENTION</text>
+      <text x="24" y="47" class="uc-title">Receive &amp; Acknowledge Hazard Alarms</text>
+      <text x="24" y="64" class="uc-sub">Crowding (&gt;45%), NH₃ spike, lamp fault, distress</text>
+    </g>
+
+    <g transform="translate(352, 646)">
+      <rect width="378" height="78" class="uc-box uc-eval" />
+      <text x="24" y="26" class="uc-id">UC-08 · EVIDENCE &amp; EXPORT</text>
+      <text x="24" y="47" class="uc-title">Inspect History, Loop Metrics &amp; CSV</text>
+      <text x="24" y="64" class="uc-sub">24h/7d/30d thermal trend, resp/stab time, F1</text>
+    </g>
+
+    <g transform="translate(352, 742)">
+      <rect width="378" height="78" class="uc-box uc-eval" />
+      <text x="24" y="26" class="uc-id">UC-09 · INTERACTIVE SANDBOX</text>
+      <text x="24" y="47" class="uc-title">Run Behavioral Simulation Scenarios</text>
+      <text x="24" y="64" class="uc-sub">Comfy, Cold, Hot, Draft, Crowding, Lamp Fail, NH₃</text>
+    </g>
+
+    <!-- Right Column Use Cases inside Boundary (x=820, width=360, height=78) -->
+    <g transform="translate(820, 96)">
+      <rect width="360" height="78" class="uc-box uc-obs" />
+      <text x="24" y="26" class="uc-id">UC-01A · EDGE VISION</text>
+      <text x="24" y="47" class="uc-title">Detect Chicks via NoIR + YOLOv8n</text>
+      <text x="24" y="64" class="uc-sub">Uncalibrated camera coordinates &amp; ArUco tags</text>
+    </g>
+
+    <g transform="translate(820, 206)">
+      <rect width="360" height="78" class="uc-box uc-obs" />
+      <text x="24" y="26" class="uc-id">UC-02A · EDGE AUDIO</text>
+      <text x="24" y="47" class="uc-title">Classify Chick Vocalizations</text>
+      <text x="24" y="64" class="uc-sub">Audio probabilities + freshness timestamping</text>
+    </g>
+
+    <g transform="translate(820, 330)">
+      <rect width="360" height="78" class="uc-box uc-ctrl" />
+      <text x="24" y="26" class="uc-id">UC-07 · CASCADE CONTROL</text>
+      <text x="24" y="47" class="uc-title">Compute Bounded Setpoint Trim</text>
+      <text x="24" y="64" class="uc-sub">±2.0 °C trim on 34→29 °C age curve · fan-blanked</text>
+    </g>
+
+    <g transform="translate(820, 536)">
+      <rect width="360" height="78" class="uc-box uc-safe" />
+      <text x="24" y="26" class="uc-id">UC-06 · SAFETY ARBITRATION</text>
+      <text x="24" y="47" class="uc-title">Enforce P0–P2 Limits &amp; Cutoff</text>
+      <text x="24" y="64" class="uc-sub">KSD301 hardware cutoff + 38 °C software trip</text>
+    </g>
+
+    <g transform="translate(820, 656)">
+      <rect width="360" height="78" class="uc-box uc-ctrl" />
+      <text x="24" y="26" class="uc-id">UC-10 · CLOUD TELEMETRY</text>
+      <text x="24" y="47" class="uc-title">Publish Sanitized Public Snapshot</text>
+      <text x="24" y="64" class="uc-sub">Allowlisted positions + audio JSON (no secrets)</text>
+    </g>
+
+    <!-- Right Secondary System Actors -->
+    <g transform="translate(1278, 108)">
+      <rect x="0" y="0" width="230" height="144" class="actor-card" />
+      <rect x="86" y="20" width="58" height="36" rx="8" fill="#14263c" stroke="#38bdf8" stroke-width="2" />
+      <text x="115" y="43" text-anchor="middle" font-size="11" font-weight="700" fill="#38bdf8" font-family="ui-monospace, monospace">RPi 5</text>
+      <text x="115" y="84" text-anchor="middle" class="actor-title">Edge AI Pipeline</text>
+      <text x="115" y="104" text-anchor="middle" class="actor-sub">ai_observer · th-brain</text>
+      <text x="115" y="122" text-anchor="middle" class="actor-sub">NoIR Cam + Mic Hat</text>
+    </g>
+
+    <g transform="translate(1278, 376)">
+      <rect x="0" y="0" width="230" height="144" class="actor-card" />
+      <rect x="82" y="20" width="66" height="36" rx="8" fill="#2b151a" stroke="#ef4444" stroke-width="2" />
+      <text x="115" y="43" text-anchor="middle" font-size="11" font-weight="700" fill="#ef4444" font-family="ui-monospace, monospace">ESP32</text>
+      <text x="115" y="84" text-anchor="middle" class="actor-title">Sensor &amp; Safety Node</text>
+      <text x="115" y="104" text-anchor="middle" class="actor-sub">DHT22 · MQ-137 · Relay</text>
+      <text x="115" y="122" text-anchor="middle" class="actor-sub">KSD301 Hardware Cutoff</text>
+    </g>
+
+    <g transform="translate(1278, 624)">
+      <rect x="0" y="0" width="230" height="144" class="actor-card" />
+      <rect x="78" y="20" width="74" height="36" rx="8" fill="#261b14" stroke="#f97316" stroke-width="2" />
+      <text x="115" y="43" text-anchor="middle" font-size="11" font-weight="700" fill="#f97316" font-family="ui-monospace, monospace">CLOUD</text>
+      <text x="115" y="84" text-anchor="middle" class="actor-title">Supabase &amp; MQTT</text>
+      <text x="115" y="104" text-anchor="middle" class="actor-sub">HTTPS Snapshot Storage</text>
+      <text x="115" y="122" text-anchor="middle" class="actor-sub">Mosquitto WS :9001</text>
+    </g>
+  </svg>
+</div>
+</body>
+</html>

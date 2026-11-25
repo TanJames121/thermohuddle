@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<meta name="theme-color" content="#f5f2e9">
+<meta name="theme-color" content="#0b0f17">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -361,17 +361,8 @@
     font: 10px var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     color: var(--ink);
   }
-  [data-theme=dark] .aruco-pill, [data-theme=dark] .clump-cell, [data-theme=dark] .esp32-card, [data-theme=dark] #histsum:not(:has(.hchip)), [data-theme=dark] .histread { background: #293024; }
-  [data-theme=dark] .aruco-pill.live { background: var(--green-soft); border-color: #4e5d3e; color: #b8d19b; }
-  [data-theme=dark] .aruco-pill.live:before { background: #b8d19b; border-color: #b8d19b; }
-  [data-theme=dark] .clump-v.live, [data-theme=dark] .sensor-state.live { color: #b8d19b; }
-  [data-theme=dark] .clump-v.warn, [data-theme=dark] .sensor-state.warn { color: #ebc39d; }
-  [data-theme=dark] .sensor-state.live:before { background: #b8d19b; border-color: #b8d19b; }
-  [data-theme=dark] .sensor-state.warn:before { background: #ebc39d; border-color: #ebc39d; }
-  [data-theme=dark] .esp32-badge.live { border-color: #4e5d3e; color: #b8d19b; }
-  [data-theme=dark] .esp32-badge.warn { border-color: #785334; color: #ebc39d; }
 </style>
-<link rel="stylesheet" href="brooder.css?v=22">
+<link rel="stylesheet" href="brooder.css?v=23">
 </head>
 <body data-mode="live">
 <svg class="icon-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -401,6 +392,7 @@
       <div class="t2" id="subtitle">BEHAVIORAL COMFORT LAB</div>
     </div>
     <div class="top-context"><span class="status-dot"></span> EDGE OBSERVATION / RPi 5</div>
+    <button id="btnscen-quick" class="top-pill-btn" type="button" title="Explore simulated comfort and fault scenarios"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg><span id="quick-scen-label">Demo Scenarios</span></button>
     <button id="connchip" type="button" title="Connect or disconnect MQTT">Connect MQTT</button>
   </div>
 
@@ -430,7 +422,7 @@
     <div id="vpbtns">
       <button class="vpb" id="btnfeed" type="button" aria-label="Toggle configured camera stream" title="Camera stream (requires separate stream setup)"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg></button>
       <button class="vpb" id="btnscen" type="button" aria-label="Open demonstration scenarios" title="Demonstration scenarios"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg></button>
-      <button class="vpb" id="btndark" type="button" aria-label="Toggle dark theme" aria-pressed="false" title="Toggle dark theme"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+      <button class="vpb" id="btndark" type="button" aria-label="Toggle dark theme" aria-pressed="true" title="Toggle dark theme"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg></button>
       <button class="vpb" id="btnsnap" type="button" aria-label="Save spatial view as PNG" title="Save spatial view"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
     </div>
     <div id="aruco-hud" class="aruco-hud" role="status" aria-live="polite"><span id="aruco-hud-text">ARUCO 4×4 · AWAITING CORNERS [0–3]</span></div>
@@ -498,7 +490,7 @@
           <div class="cs" id="distress-sub">—</div>
         </div>
         <div id="whycard">
-          <div class="why-ico" id="whyico">🔎</div>
+          <div class="why-ico" id="whyico">i</div>
           <div class="why-main">
             <div class="why-t" id="whyt">—</div>
             <div class="why-b" id="whyb">Awaiting behavior window from th-brain.</div>
@@ -596,18 +588,18 @@
   </div>
 </div>
 
-<script src="pilot.js?v=22"></script>
-<script src="cloud-feed.js?v=22"></script>
+<script src="pilot.js?v=23"></script>
+<script src="cloud-feed.js?v=23"></script>
 <script>
 p5.disableFriendlyErrors = true;
 
 // ================= ENGINE (same logic as brooder_tracker, mobile skin) =================
 const CONFIG = { nChicks: 50, floor: 100, wallH: 40, camH: 95, seed: 7 };
 const STATES = {
-  COMFY: { name: 'COMFORTABLE', col: '#7fae55', ink: '#3c5a1e' },
-  COLD:  { name: 'TOO COLD',    col: '#4a7fb5', ink: '#2a4a6e' },
-  HOT:   { name: 'TOO HOT',     col: '#dc0014', ink: '#8c1a20' },
-  DRAFT: { name: 'DRAFT',       col: '#7f9db5', ink: '#3a4a5e' },
+  COMFY: { name: 'COMFORTABLE', col: '#22c55e', ink: '#15803d', darkInk: '#4ade80' },
+  COLD:  { name: 'TOO COLD',    col: '#38bdf8', ink: '#0369a1', darkInk: '#7dd3fc' },
+  HOT:   { name: 'TOO HOT',     col: '#ef4444', ink: '#b91c1c', darkInk: '#f87171' },
+  DRAFT: { name: 'DRAFT',       col: '#f59e0b', ink: '#b45309', darkInk: '#fbbf24' },
 };
 const SCEN = {
   COMFY:    { label: 'Comfortable' },
@@ -640,7 +632,7 @@ let sim = { t: 0, mode: 'manual', forced: 'LIVE', day: 1,
             floorT: 32.5, classState: 'COMFY', holdTimer: 0, nh3: 6,
             crowdStreak: 0, crowdActive: false, crowdAlertAt: 0, crowdGrace: 0,
             stats: null };
-let DARKMODE = false;
+let DARKMODE = true;
 let camAng = -0.7, camElev = 0.72, camDist = 245;
 let dragging = false, lastX = 0, lastY = 0;
 
@@ -688,18 +680,19 @@ const CTRL = {
 
 // ================= P5 SETUP =================
 function setup() {
-  const c = document.getElementById('p5canvas');
   const w = document.getElementById('viewport');
+  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+  setAttributes({ antialias: true, preserveDrawingBuffer: true });
   const cnv = createCanvas(w.clientWidth, w.clientHeight, WEBGL);
   cnv.parent('viewport');
   cnv.id('p5canvas');
   const placeholder = w.querySelector('canvas[aria-hidden="true"]');
   if (placeholder && placeholder !== cnv.elt) placeholder.remove();
   cnv.elt.setAttribute('aria-hidden', 'true');
+  cnv.elt.style.position = 'absolute';
+  cnv.elt.style.inset = '0';
   frameRate(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 8 : 24);
   randomSeed(CONFIG.seed); noiseSeed(CONFIG.seed);
-  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
-  setAttributes('antialias', true);
   for (let i = 0; i < CONFIG.nChicks; i++) chicks.push(new Chick());
   assignHomes();
   window.addEventListener('resize', () => {
@@ -764,10 +757,17 @@ function drawDot(x, z, clumped = false) {
 }
 function drawChickBody(x, z, bodyCol, beakCol) {
   push();
+  translate(x, -1.45, z);
+  rotateX(HALF_PI);
+  noStroke();
+  fill(0, 0, 0, 75);
+  circle(0, 0, 3.8);
+  pop();
+  push();
   translate(x, -1.2, z);
   noStroke();
   fill(bodyCol);
-  sphere(2.2, 10, 8);
+  sphere(2.2, 12, 9);
   translate(0, 1.4, 1.6);
   fill(beakCol);
   sphere(1.3, 8, 6);
@@ -944,9 +944,9 @@ function computeStatsPts(pts) {
 function draw() {
   updateSim();
   updateUI();
-  background(41, 46, 39); ambientLight(155, 150, 125);
-  directionalLight(255, 250, 240, -0.4, -1, -0.3);
-  directionalLight(130, 140, 150, 0.5, -0.4, 0.4);
+  background(13, 19, 31); ambientLight(145, 152, 168);
+  directionalLight(255, 246, 232, -0.4, -1, -0.3);
+  directionalLight(100, 145, 200, 0.5, -0.4, 0.4);
   const viewDistance = camDist * Math.max(1, 1.8 * height / width);
   const cy = Math.sin(camElev) * viewDistance, ch = Math.cos(camElev) * viewDistance;
   camera(Math.cos(camAng) * ch, -cy, Math.sin(camAng) * ch, 0, -12, 0, 0, 1, 0);
@@ -1075,10 +1075,15 @@ function drawCrowdPulse(isLive) {
 }
 
 function drawHeat() {
-  push(); noStroke(); translate(0, -1.6, 0);
-  const r = lerp(26, 46, sim.lampPWM);
-  fill(255, lerp(70, 170, sim.lampPWM), 40, 20 + sim.lampPWM * 22);
-  circle(0, 0, r * 2); pop();
+  push(); noStroke(); translate(0, -1.55, 0); rotateX(HALF_PI);
+  const r = lerp(24, 44, sim.lampPWM);
+  fill(249, 115, 22, 14 + sim.lampPWM * 18);
+  circle(0, 0, r * 2);
+  fill(251, 146, 60, 18 + sim.lampPWM * 22);
+  circle(0, 0, r * 1.3);
+  fill(253, 186, 116, 22 + sim.lampPWM * 26);
+  circle(0, 0, r * 0.7);
+  pop();
 }
 
 // ================= UI BINDING =================
@@ -1089,7 +1094,7 @@ function updateUI() {
   const st = STATES[sim.classState] || STATES.COMFY;
   // banner
   $('sbstate').textContent = sim.crowdActive ? 'CROWDING ALARM' : st.name;
-  $('sbstate').style.color = sim.crowdActive ? 'var(--red)' : st.ink;
+  $('sbstate').style.color = sim.crowdActive ? 'var(--red)' : (DARKMODE ? st.darkInk : st.ink);
   $('sbdot').style.background = sim.crowdActive ? 'var(--red)' : st.col;
   $('sbdot').style.boxShadow = `0 0 0 4px ${sim.crowdActive ? 'rgba(220,0,20,.2)' : st.col + '40'}`;
   $('sbsub').textContent = (sim.forced === 'LIVE' ? 'LIVE · ' + liveDots.length + ' tracked · ' : '') +
@@ -1160,6 +1165,10 @@ $('btnscen').addEventListener('click', () => {
   $('scensheet').classList.add('open');
   $('scensheet').querySelector('.scen').focus();
 });
+$('btnscen-quick') && $('btnscen-quick').addEventListener('click', () => {
+  $('scensheet').classList.add('open');
+  $('scensheet').querySelector('.scen').focus();
+});
 $('scensheet').addEventListener('keydown', e => {
   if (e.key === 'Escape') { $('scensheet').classList.remove('open'); $('btnscen').focus(); }
   if (e.key === 'Tab') {
@@ -1173,6 +1182,8 @@ $('btndark').addEventListener('click', () => {
   DARKMODE = !DARKMODE;
   document.documentElement.dataset.theme = DARKMODE ? 'dark' : 'light';
   $('btndark').setAttribute('aria-pressed', String(DARKMODE));
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.setAttribute('content', DARKMODE ? '#0b0f17' : '#f3f5f8');
   LOGS.log('info', (DARKMODE ? 'dark' : 'light') + ' mode');
 });
 $('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
@@ -1247,19 +1258,19 @@ function stopFeed() {
 
 // ---- behavioral reasoning ("why are they doing this") ----
 const WHY = {
-  COLD: { ico: '🥶', t: 'Clustering under the lamp — too cold',
+  COLD: { ico: 'COLD', t: 'Clustering under the lamp — too cold',
     b: 'Chicks huddle to share body heat and shrink exposed surface. NND low + high center occupancy. The controller is raising the setpoint.' },
-  HOT: { ico: '🥵', t: 'Spreading to the walls — too hot',
+  HOT: { ico: 'HOT', t: 'Spreading to the walls — too hot',
     b: 'Chicks move apart and toward the coolest edges to shed heat; panting/wing-droop may appear. Occupancy entropy high, center empty. Setpoint is being trimmed down.' },
-  DRAFT: { ico: '💨', t: 'Avoiding one side of the floor — draft detected',
+  DRAFT: { ico: 'DRFT', t: 'Avoiding one side of the floor — draft detected',
     b: 'Chicks vacate the drafty zone and pack on the leeward side; centroid is displaced. Check for gaps in the brooder wall or fan placement.' },
-  CROWD: { ico: '⚠️', t: 'Piling in one spot — smothering risk',
+  CROWD: { ico: 'CRWD', t: 'Piling in one spot — smothering risk',
     b: 'More than 45% of the flock in a single grid cell. Piling can suffocate chicks within minutes. Alarm + ventilation burst triggered; re-checks every 5 min.' },
-  LAMPFAIL: { ico: '🔌', t: 'Cold behavior despite high setpoint — heat source suspect',
+  LAMPFAIL: { ico: 'LAMP', t: 'Cold behavior despite high setpoint — heat source suspect',
     b: 'Floor temp is falling while the lamp duty is near 0. Behavior matches cold clumping, so the brain flags a lamp/relay fault rather than a setpoint issue.' },
-  AMMONIA: { ico: '☣️', t: 'Restless, avoiding the litter center — ammonia high',
+  AMMONIA: { ico: 'NH3', t: 'Restless, avoiding the litter center — ammonia high',
     b: 'Birds avoid pungent litter zones and chirp more. NH₃ above 25 ppm triggers ventilation; above 50 ppm is a welfare risk.' },
-  COMFY: { ico: '😌', t: 'Evenly spread — comfortable',
+  COMFY: { ico: 'OK', t: 'Evenly spread — comfortable',
     b: 'NND near the random-uniform expectation and balanced cell occupancy. The flock is in its thermal neutral zone; no correction needed.' },
 };
 // ---- cross-modal confidence: behavior (spatial dispersion) × thermal (vs baseline) ----
@@ -1287,14 +1298,14 @@ function fuseNow() {
 }
 function renderWhy() {
   if (sim.forced === 'LIVE' && !liveDots.length) {
-    $('whyico').textContent = '🔎';
+    $('whyico').textContent = 'i';
     $('whyt').textContent = 'Awaiting first behavior window';
-    $('whyb').textContent = 'No chick positions received yet — connect MQTT/Supabase, or open 🎛 to run a scenario.';
+    $('whyb').textContent = 'No chick positions received yet — connect MQTT/Supabase, or open Demo Scenarios to simulate.';
     return;
   }
   // a Pi-reported cross-modal conflict overrides the plain state explanation
   if (window.__liveConf != null && window.__liveConflict) {
-    $('whyico').textContent = '⚠️';
+    $('whyico').textContent = 'WARN';
     $('whyt').textContent = 'Behavior and temperature disagree — verify the brooder';
     $('whyb').textContent = 'The model reads a comfort state that the floor temperature does not corroborate (confidence '
       + window.__liveConf.toFixed(2) + '). Check for a draft, a lamp/relay fault, or a sensor fault before trusting this reading.';
@@ -1303,7 +1314,7 @@ function renderWhy() {
   let w = WHY[sim.classState] || WHY.COMFY;
   // physical limit: HOT with the lamp already off → ambient itself is too warm
   if (sim.classState === 'HOT' && sim.lampPWM <= 0.05 && sim.floorT > sim.setpoint + 0.5) {
-    w = { ico: '🌡️', t: 'Still hot with lamp at 0% — ambient limit',
+    w = { ico: 'LIM', t: 'Still hot with lamp at 0% — ambient limit',
       b: 'The loop removed the lamp\'s heat but the brooder tracks outside air — trim cannot cool below ambient. Fans give convective relief only. Farmer actions: wet-sack evaporative cooling on the fan intake, shade the brooder, brood cooler hours.' };
   }
   $('whyico').textContent = w.ico;
@@ -1367,32 +1378,33 @@ function histSeries() {
 
 function renderHist() {
   const cv = $('histcanvas'), ctx = cv.getContext('2d');
-  const W = cv.width, H = cv.height, pad = 30;
-  ctx.fillStyle = '#14170f'; ctx.fillRect(0, 0, W, H);
+  const W = cv.width, H = cv.height, pad = 34;
+  ctx.fillStyle = '#0d131f'; ctx.fillRect(0, 0, W, H);
   const s = histSeries();
   if (sim.forced === 'LIVE') {
     HIST_LAYOUT = null;
-    ctx.fillStyle = '#e3dcc6'; ctx.font = '14px system-ui';
+    ctx.fillStyle = '#f1f5f9'; ctx.font = '600 14px system-ui';
     ctx.fillText('Thermal history waits for sensors.', 30, H / 2 - 8);
-    ctx.fillStyle = '#b7bba6'; ctx.font = '11px system-ui';
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11.5px system-ui';
     ctx.fillText('Camera and microphone observations remain live.', 30, H / 2 + 16);
     $('histsum').textContent = 'No measured temperature data. Placeholder values are excluded.';
     $('histread').textContent = 'Observation-only pilot · no thermal samples';
     return;
   }
   if (s.floorT.length < 2) {
-    ctx.fillStyle = '#8f9578'; ctx.font = '13px system-ui';
+    ctx.fillStyle = '#94a3b8'; ctx.font = '13px system-ui';
     ctx.fillText('collecting data… run a scenario or connect LIVE', 70, H / 2);
     $('histsum').innerHTML = '';
     return;
   }
   const temps = s.floorT.concat(s.setpoint);
   const tMin = Math.min(...temps) - 1, tMax = Math.max(...temps) + 1;
-  const x0 = pad, x1 = W - 10, y0 = H - pad, y1 = 10;
+  const x0 = pad + 4, x1 = W - 16, y0 = H - pad, y1 = 22;
   const N = s.floorT.length;
   const X = i => x0 + (x1 - x0) * i / (N - 1);
   const Y = t => y0 - (y0 - y1) * (t - tMin) / (tMax - tMin);
-  ctx.strokeStyle = '#2a2e20'; ctx.fillStyle = '#8f9578'; ctx.font = '10px system-ui';
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#94a3b8'; ctx.font = '10px ui-monospace, monospace';
   for (let tt = Math.ceil(tMin); tt <= tMax; tt++) {
     ctx.beginPath(); ctx.moveTo(x0, Y(tt)); ctx.lineTo(x1, Y(tt)); ctx.stroke();
     ctx.fillText(tt + '°', 6, Y(tt) + 3);
@@ -1403,17 +1415,41 @@ function renderHist() {
     ctx.fillText(s.labels[i], X(i) - 12, H - 10);
   }
   for (let i = 0; i < N; i++) {
-    ctx.fillStyle = STATE_COLORS[s.states[i]] || '#555';
-    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = STATE_COLORS[s.states[i]] || '#64748b';
+    ctx.globalAlpha = 0.11;
     ctx.fillRect(X(i), y1, (x1 - x0) / (N - 1) + 1, y0 - y1);
   }
   ctx.globalAlpha = 1;
-  ctx.strokeStyle = '#7fae55'; ctx.lineWidth = 1.5; ctx.beginPath();
+  // Setpoint dashed green curve
+  ctx.save();
+  ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 1.7; ctx.setLineDash([5, 4]);
+  ctx.beginPath();
   s.setpoint.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
   ctx.stroke();
-  ctx.strokeStyle = '#ff7b3d'; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.restore();
+  // Floor temperature gradient area fill
+  const areaGrad = ctx.createLinearGradient(0, y1, 0, y0);
+  areaGrad.addColorStop(0, 'rgba(249, 115, 22, 0.34)');
+  areaGrad.addColorStop(1, 'rgba(249, 115, 22, 0.0)');
+  ctx.fillStyle = areaGrad;
+  ctx.beginPath();
+  s.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
+  ctx.lineTo(X(N - 1), y0);
+  ctx.lineTo(X(0), y0);
+  ctx.closePath();
+  ctx.fill();
+  // Floor temperature glowing curve
+  ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2.4; ctx.beginPath();
   s.floorT.forEach((t, i) => i ? ctx.lineTo(X(i), Y(t)) : ctx.moveTo(X(i), Y(t)));
   ctx.stroke();
+  // Latest point indicator
+  const lx = X(N - 1), ly = Y(s.floorT[N - 1]);
+  ctx.fillStyle = 'rgba(249, 115, 22, 0.28)'; ctx.beginPath(); ctx.arc(lx, ly, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fb923c'; ctx.beginPath(); ctx.arc(lx, ly, 3.2, 0, Math.PI * 2); ctx.fill();
+  // Compact legend
+  ctx.font = '600 10px ui-monospace, monospace';
+  ctx.fillStyle = '#f97316'; ctx.fillText('— Floor °C', x1 - 156, 14);
+  ctx.fillStyle = '#22c55e'; ctx.fillText('-- Setpoint °C', x1 - 80, 14);
   // warning/event markers + scrub layout (remote history)
   HIST_LAYOUT = { x0, x1, y0, y1, times: s.times || null, N, markerPts: [] };
   if (s.times && HIST_REMOTE.events.length) {
@@ -1438,6 +1474,9 @@ function renderHist() {
     `<span class="hchip">avg <b>${avg.toFixed(1)}°C</b></span>` +
     `<span class="hchip">min <b>${Math.min(...s.floorT).toFixed(1)}°</b> · max <b>${Math.max(...s.floorT).toFixed(1)}°</b></span>` +
     `<span class="hchip">comfy <b>${Math.round(comfy*100)}%</b></span>`;
+  if ($('histread') && !HIST_REMOTE.series.length) {
+    $('histread').textContent = 'Simulated thermal timeline · hover or click remote history points when connected';
+  }
 }
 
 // ================= REMOTE HISTORY (Supabase) =================
@@ -1642,14 +1681,14 @@ function setMetricTime(vid, gid, secs, goodT, okT, goodLbl, okLbl) {
   if (secs == null) { v.textContent = '—'; v.className = 'mv'; g.textContent = ''; return; }
   v.textContent = secs < 600 ? Math.round(secs) + 's' : (secs / 60).toFixed(1) + 'm';
   v.className = 'mv ' + (secs <= goodT ? 'good' : secs <= okT ? 'ok' : 'poor');
-  g.textContent = secs <= goodT ? '🟢 ' + goodLbl : secs <= okT ? '🟡 ' + okLbl : '🔴 user-visible lag';
+  g.textContent = secs <= goodT ? '• ' + goodLbl : secs <= okT ? '• ' + okLbl : '• user-visible lag';
 }
 function setMetric(vid, gid, val, kind) {
   const v = $(vid), g = $(gid);
   if (val == null) { v.textContent = '—'; v.className = 'mv'; g.textContent = ''; return; }
   v.textContent = Math.round(val * 100) + '%';
   v.className = 'mv ' + (val >= 0.8 ? 'good' : val >= 0.6 ? 'ok' : 'poor');
-  g.textContent = val >= 0.8 ? '🟢 strong' : val >= 0.6 ? '🟡 fair' : '🔴 weak';
+  g.textContent = val >= 0.8 ? '• strong' : val >= 0.6 ? '• fair' : '• weak';
 }
 // ingestion: th-brain publishes {kind:"control_metrics", data:{accuracy,f1,crowd_recall,resp_s,stab_s,version}}
 window.ingestControlMetrics = function(m) {
@@ -1698,7 +1737,7 @@ function renderWarn() {
   if (HIST_REMOTE.events.length) {
     $('warnbody').innerHTML = HIST_REMOTE.events.map((e, i) => ({ e, i })).reverse().slice(0, 60).map(({ e, i }) =>
       `<div class="logline warn clickable" data-ev="${i}"><span class="t">${new Date(e.ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</span>` +
-      `${e.kind}${e.outcome ? ' — ' + e.outcome : ''}${e.img_before ? ' 📷' : ''}</div>`).join('');
+      `${e.kind}${e.outcome ? ' — ' + e.outcome : ''}${e.img_before ? ' [frame]' : ''}</div>`).join('');
     return;
   }
   $('warnbody').innerHTML = LOGS.warn.slice().reverse().slice(0, 60).map(e =>
@@ -1828,7 +1867,7 @@ vp.addEventListener('wheel', e => { camDist = constrain(camDist + e.delta * 0.15
 // SW registration
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=22')
+    navigator.serviceWorker.register('sw.js?v=23')
       .then((reg) => reg.update())
       .catch(err => console.warn('[sw]', err));
     // Updated workers claim instantly (skipWaiting); apply their new shell once.

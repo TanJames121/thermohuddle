@@ -1,5 +1,5 @@
 /* ThermoHuddle service worker — offline model-aware observation-only shell. */
-const CACHE = 'thermohuddle-v22';
+const CACHE = 'thermohuddle-v23';
 const ASSETS = [
   './index.html',
   './brooder.css',

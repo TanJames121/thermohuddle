@@ -168,7 +168,9 @@ window.renderPilot = function () {
   document.getElementById('sbstate').style.color = 'var(--ink)';
   const dot = document.getElementById('sbdot');
   dot.style.background = navigator.onLine && view.cameraLive && view.micLive ? 'var(--green)' : 'var(--amber)';
-  dot.style.boxShadow = '0 0 0 4px #60734b18';
+  dot.style.boxShadow = navigator.onLine && view.cameraLive && view.micLive
+    ? '0 0 0 5px var(--green-soft)'
+    : '0 0 0 5px var(--amber-soft)';
   put('sbsub', !navigator.onLine ? 'Cached observation only. Reconnect for live updates.' : view.fresh ? 'Observation only. Thermal sensing comes next.' : location.protocol === 'https:' ? 'No fresh cloud observations. Check the Pi and cloud bridge.' : 'No fresh telemetry. Check the Pi or connect MQTT.');
   put('sbtemp', view.age === null ? '—' : `${view.age}s`);
   put('signal-count', view.count === null ? '—' : view.count);
@@ -285,6 +287,8 @@ window.setPilotMode = function (live) {
   document.body.dataset.mode = live ? 'live' : 'demo';
   document.getElementById('sbtemp-label').textContent = live ? 'sample age' : 'demo floor';
   document.getElementById('pilot-mode-name').textContent = live ? 'Camera + mic pilot' : 'Simulation · not live';
+  const qLabel = document.getElementById('quick-scen-label');
+  if (qLabel) qLabel.textContent = live ? 'Demo Scenarios' : 'Simulating · Switch';
   document.getElementById('observation-note').textContent = live
     ? 'Camera-derived positions, not live video. Drag to orbit; scroll to zoom.'
     : 'Simulated flock and thermal values. No hardware is controlled by this demo.';

@@ -7,12 +7,17 @@
     "ui": {
       "passed": 9,
       "message": "Live-only history, export, analytics, controls, canvas and layout checks passed"
+    },
+    "cloud": {
+      "passed": 10,
+      "message": "Cloud scheduling, public URL and trained-model forwarding checks passed"
+    },
+    "regressions": {
+      "frameWork": true,
+      "modeTransition": true,
+      "historyScrub": true,
+      "futureRecovery": true
     }
-  },
-  "live": {
-    "mqtt": true,
-    "fresh": true,
-    "transport": "Cloud MQTT \u00b7 receiving"
   },
   "layouts": [
     {
