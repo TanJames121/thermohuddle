@@ -16,6 +16,8 @@ Team: **Bolda · Gabriel · Payumo · Tan · Tangcuangco** — CpE 404 Capstone 
 
 ## Visual Showcase — Bento Glassmorphic Dashboard & Diagrams
 
+[Present the five-figure walkthrough](https://tanjames121.github.io/thermohuddle/docs/presentation/) · [Read the speaker script and panel questions](docs/presentation/README.md)
+
 ### Three.js brooder
 
 The model has a 100 × 80 cm outer footprint and 21 cm enclosure walls. **Orbit** shows the lamp assembly, **Top** exposes the full floor, and **Dimensions** shows measurements. Drag to orbit and pinch or scroll to zoom.
@@ -30,7 +32,7 @@ The model has a 100 × 80 cm outer footprint and 21 cm enclosure walls. **Orbit*
 
 ### Behavioral Modes, Thermal History & Mobile Responsive Layout
 
-| Cold Huddling Demo (Trim +2.0 °C) | Thermal History Timeline | Mobile Stack (390 px) |
+| Simulated Cold Scenario | Thermal History Timeline | Mobile Stack (390 px) |
 |---|---|---|
 | ![ThermoHuddle Cold Scenario](docs/presentation/03-dashboard-demo-cold.png) | ![ThermoHuddle History Chart](docs/presentation/06-dashboard-history-chart.png) | ![ThermoHuddle Mobile UI](docs/presentation/08-ui-mobile-responsive.png) |
 
