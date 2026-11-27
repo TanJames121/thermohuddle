@@ -1876,3 +1876,19 @@ body[data-mode=demo] .observation-caption {
     scroll-behavior: auto !important;
   }
 }
+
+.model-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:10px 15px 0; }
+.model-size { font:12px var(--mono); color:var(--muted, #91a0ac); }
+.model-size strong { font-weight:600; color:var(--text); }
+.model-controls { display:flex; gap:3px; }
+.model-controls button { font:600 12px var(--sans, sans-serif); color:inherit; background:transparent; border:1px solid transparent; border-radius:6px; padding:7px 9px; cursor:pointer; }
+.model-controls button[aria-pressed="true"] { color:#e7ad72; background:#2a2624; border-color:#685140; }
+.model-controls button:focus-visible, #p5canvas:focus-visible { outline:2px solid #edb16d; outline-offset:-2px; }
+#p5canvas { width:100%; height:100%; touch-action:none; }
+#scene-error { position:absolute; inset:40% 8% auto; text-align:center; color:white; }
+
+@media (max-width: 700px) {
+  #viewport.measuring #aruco-hud { bottom: 6px; }
+  #viewport.measuring .viewport-bottom { visibility: hidden; }
+  #viewport.measuring #vplabel { top: 10px; left: 8px; max-width: calc(100% - 204px); font-size: 8px; }
+}

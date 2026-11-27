@@ -1,11 +1,14 @@
 /* ThermoHuddle service worker — offline model-aware observation-only shell. */
-const CACHE = 'thermohuddle-v23';
+const CACHE = 'thermohuddle-v24';
 const ASSETS = [
   './index.html',
   './brooder.css',
   './pilot.js',
   './cloud-feed.js',
   './p5.min.js',
+  './brooder-scene.js',
+  './vendor/three/three.module.min.js',
+  './vendor/three/three.core.min.js',
   './mqtt.min.js',
   './manifest.json',
   './icon-192.png',

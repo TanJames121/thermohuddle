@@ -16,6 +16,12 @@ Team: **Bolda · Gabriel · Payumo · Tan · Tangcuangco** — CpE 404 Capstone 
 
 ## Visual Showcase — Bento Glassmorphic Dashboard & Diagrams
 
+### Three.js brooder
+
+The model has a 100 × 80 cm outer footprint and 21 cm enclosure walls. **Orbit** shows the lamp assembly, **Top** exposes the full floor, and **Dimensions** shows measurements. Drag to orbit and pinch or scroll to zoom.
+
+![Measured perspective of the brooder](docs/presentation/brooder-dimensions.png)
+
 ### Live Observation Dashboard (Obsidian Dark & Warm Light)
 
 | Live Pilot · Obsidian Dark Bento | Live Pilot · Warm Light Bento |
@@ -57,7 +63,7 @@ Or launch manually from the repository root:
 ## Pilot Truthfulness & Safety Boundaries
 
 - **Local LIVE:** MQTT remains available through private, git-ignored `broker.js`; same-origin Pi JSON (`tracking_latest.json`) is the fallback. Never commit publisher credentials to a public repository.
-- **Camera view:** a 3D `p5.js` spatial reconstruction of detected positions / motion regions (`ArUco 4x4` floor homography IDs `0–3`), not live video or a validated chick count. Live video requires a separately configured stream.
+- **Camera view:** a Three.js spatial reconstruction of the 100 × 80 × 21 cm enclosure of detected positions / motion regions (`ArUco 4x4` floor homography IDs `0–3`), not live video or a validated chick count. Live video requires a separately configured stream.
 - **Camera/mic pilot:** when floor DS18B20 and thermal actuators are not connected, thermal controls, thermal history/CSV export, and comfort claims remain unavailable in LIVE mode. Scenario controls (`Comfy`, `Cold`, `Hot`, `Draft`, `Crowding`, `Lamp fail`, `NH₃ spike`) explicitly use simulated data.
 - **Panels:** `Overview`, `History`, `Analytics`, `Field log`, and `Warnings`. The Pi and its cloud bridge must stay running for fresh remote observations.
 
@@ -68,7 +74,7 @@ Or launch manually from the repository root:
 | Path | Purpose |
 |---|---|
 | `index.html`, `brooder.css`, `pilot.js`, `cloud-feed.js` | **The PWA** — Bento glassmorphic 3D dashboard, honest pilot state validation, MQTT-over-WS, and HTTPS cloud polling |
-| `manifest.json`, `sw.js`, `p5.min.js`, `mqtt.min.js`, icons | Offline PWA shell + bundled local WebGL/MQTT libraries |
+| `manifest.json`, `sw.js`, `vendor/three/`, `p5.min.js`, `mqtt.min.js`, icons | Offline PWA shell + bundled local WebGL/MQTT libraries |
 | `start_app.bat` / `start_app.sh` | One-click local launchers |
 | `broker.js.example`, `mosquitto.conf.example` | Broker credentials/config templates (keep real `broker.js` out of git) |
 | **`docs/ThermoHuddle_Overview.md`** | **Project overview & feature manual** — comfort states, spatial statistics (NND/Shannon/Clark–Evans), and data model |

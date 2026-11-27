@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ThermoHuddle — Flock Monitor</title>
 <script src="p5.min.js"></script>
+<script type="module" src="./brooder-scene.js"></script>
 <script src="mqtt.min.js"></script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -362,7 +363,7 @@
     color: var(--ink);
   }
 </style>
-<link rel="stylesheet" href="brooder.css?v=23">
+<link rel="stylesheet" href="brooder.css?v=24">
 </head>
 <body data-mode="live">
 <svg class="icon-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -416,7 +417,8 @@
   <section id="observation" aria-labelledby="spatial-title">
     <div class="observation-head"><div><div class="section-index">01 / THE BROODER</div><h2 id="spatial-title">A bird’s-eye perspective</h2></div><span class="source-tag" id="camera-source">NoIR camera · waiting</span></div>
   <div id="viewport" aria-label="Interactive 3D reconstruction of camera-derived motion regions">
-    <canvas id="p5canvas" aria-hidden="true"></canvas>
+    <canvas id="p5canvas" tabindex="0" aria-label="Brooder model. Arrow keys orbit, plus and minus zoom, Home restores the view."></canvas>
+    <p id="scene-error" hidden role="status">The 3D view needs WebGL 2. Camera and sensor readings are available below.</p>
     <video id="livefeed" autoplay playsinline muted></video>
     <div id="vplabel">SPATIAL VIEW / WAITING</div>
     <div id="vpbtns">
@@ -428,6 +430,14 @@
     <div id="aruco-hud" class="aruco-hud" role="status" aria-live="polite"><span id="aruco-hud-text">ARUCO 4×4 · AWAITING CORNERS [0–3]</span></div>
     <div class="viewport-bottom"><span class="view-key"><i></i> Motion regions</span><span class="coordinates">SPATIAL RECONSTRUCTION<br>NOT A LIVE VIDEO FEED</span></div>
   </div>
+    <div class="model-toolbar">
+      <span class="model-size"><strong>100 × 80 × 21</strong> cm</span>
+      <div class="model-controls" role="group" aria-label="Brooder view">
+        <button id="view-orbit" type="button" aria-pressed="true">Orbit</button>
+        <button id="view-plan" type="button" aria-pressed="false">Top</button>
+        <button id="view-measure" type="button" aria-pressed="false">Dimensions</button>
+      </div>
+    </div>
     <div class="observation-caption"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="observation-note">Camera-derived positions, not live video. Drag to orbit; scroll to zoom.</span></div>
     <div class="audio-panel"><div class="audio-top"><span class="audio-title"><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg>A little sound tells a story.</span><span class="audio-number"><span id="audio-level">—</span> <small>dBFS</small></span></div><div class="audio-chart" id="audio-chart" role="img" aria-label="Recent received microphone levels; numeric reading above"></div><div class="audio-foot"><span id="audio-label">Waiting for live sound samples</span><span id="audio-peak">Peak —</span></div></div>
   </section>
@@ -594,7 +604,7 @@
 p5.disableFriendlyErrors = true;
 
 // ================= ENGINE (same logic as brooder_tracker, mobile skin) =================
-const CONFIG = { nChicks: 50, floor: 100, wallH: 40, camH: 95, seed: 7 };
+const CONFIG = { nChicks: 50, floor: 100, seed: 7 };
 const STATES = {
   COMFY: { name: 'COMFORTABLE', col: '#22c55e', ink: '#15803d', darkInk: '#4ade80' },
   COLD:  { name: 'TOO COLD',    col: '#38bdf8', ink: '#0369a1', darkInk: '#7dd3fc' },
@@ -633,8 +643,6 @@ let sim = { t: 0, mode: 'manual', forced: 'LIVE', day: 1,
             crowdStreak: 0, crowdActive: false, crowdAlertAt: 0, crowdGrace: 0,
             stats: null };
 let DARKMODE = true;
-let camAng = -0.7, camElev = 0.72, camDist = 245;
-let dragging = false, lastX = 0, lastY = 0;
 
 // history + logs
 const HIST = {
@@ -680,24 +688,12 @@ const CTRL = {
 
 // ================= P5 SETUP =================
 function setup() {
-  const w = document.getElementById('viewport');
-  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
-  setAttributes({ antialias: true, preserveDrawingBuffer: true });
-  const cnv = createCanvas(w.clientWidth, w.clientHeight, WEBGL);
-  cnv.parent('viewport');
-  cnv.id('p5canvas');
-  const placeholder = w.querySelector('canvas[aria-hidden="true"]');
-  if (placeholder && placeholder !== cnv.elt) placeholder.remove();
-  cnv.elt.setAttribute('aria-hidden', 'true');
-  cnv.elt.style.position = 'absolute';
-  cnv.elt.style.inset = '0';
+  noCanvas(); // p5 drives the existing simulation clock and vector math.
   frameRate(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 8 : 24);
   randomSeed(CONFIG.seed); noiseSeed(CONFIG.seed);
   for (let i = 0; i < CONFIG.nChicks; i++) chicks.push(new Chick());
   assignHomes();
-  window.addEventListener('resize', () => {
-    resizeCanvas(w.clientWidth, w.clientHeight);
-  });
+
 }
 
 function assignHomes() {
@@ -742,36 +738,6 @@ class Chick {
     this.pos.x = constrain(this.pos.x, -CONFIG.floor/2 + 4, CONFIG.floor/2 - 4);
     this.pos.z = constrain(this.pos.z, -CONFIG.floor/2 + 4, CONFIG.floor/2 - 4);
   }
-  display() { drawChickBody(this.pos.x, this.pos.z, '#fffdf4', '#e8c99a'); }
-}
-function drawDot(x, z, clumped = false) {
-  push();
-  translate(x, -1.45, z);
-  rotateX(HALF_PI);
-  noFill();
-  stroke(clumped ? 238 : 110, clumped ? 128 : 196, clumped ? 72 : 122);
-  strokeWeight(1.3);
-  circle(0, 0, 4.6);
-  pop();
-  drawChickBody(x, z, clumped ? '#ffe6cc' : '#fffdf4', clumped ? '#e07b42' : '#d8b77e');
-}
-function drawChickBody(x, z, bodyCol, beakCol) {
-  push();
-  translate(x, -1.45, z);
-  rotateX(HALF_PI);
-  noStroke();
-  fill(0, 0, 0, 75);
-  circle(0, 0, 3.8);
-  pop();
-  push();
-  translate(x, -1.2, z);
-  noStroke();
-  fill(bodyCol);
-  sphere(2.2, 12, 9);
-  translate(0, 1.4, 1.6);
-  fill(beakCol);
-  sphere(1.3, 8, 6);
-  pop();
 }
 
 // ================= SIMULATION (plan-aligned) =================
@@ -944,146 +910,13 @@ function computeStatsPts(pts) {
 function draw() {
   updateSim();
   updateUI();
-  background(13, 19, 31); ambientLight(145, 152, 168);
-  directionalLight(255, 246, 232, -0.4, -1, -0.3);
-  directionalLight(100, 145, 200, 0.5, -0.4, 0.4);
-  const viewDistance = camDist * Math.max(1, 1.8 * height / width);
-  const cy = Math.sin(camElev) * viewDistance, ch = Math.cos(camElev) * viewDistance;
-  camera(Math.cos(camAng) * ch, -cy, Math.sin(camAng) * ch, 0, -12, 0, 0, 1, 0);
-  drawBrooder();
   const isLive = sim.forced === 'LIVE';
-  if (isLive) {
-    if (window.pilotViewState(window.PILOT_SAMPLE).cameraLive) {
-      // blur/occlusion flicker: keep last-seen positions visible ~12 s
-      const holdAge = Date.now() - liveDotsHoldTs;
-      const activeDots = liveDots.length ? liveDots
-        : (liveDotsHold.length && holdAge < 12000 ? liveDotsHold : []);
-      const clumped = new Set();
-      stroke(238, 128, 72); strokeWeight(1.6); noFill();
-      for (let i = 0; i < activeDots.length; i++) {
-        for (let j = i + 1; j < activeDots.length; j++) {
-          const d = Math.hypot(activeDots[i].x - activeDots[j].x, activeDots[i].z - activeDots[j].z);
-          if (d < 14) {
-            clumped.add(i); clumped.add(j);
-            line(activeDots[i].x, -1.35, activeDots[i].z, activeDots[j].x, -1.35, activeDots[j].z);
-          }
-        }
-      }
-      for (let i = 0; i < activeDots.length; i++) drawDot(activeDots[i].x, activeDots[i].z, clumped.has(i));
-    }
+  const pilot = isLive ? window.pilotViewState(window.PILOT_SAMPLE) : null;
+  let points = [];
+  if (pilot?.cameraLive) {
+    points = liveDots.length ? liveDots : (Date.now() - liveDotsHoldTs < 12000 ? liveDotsHold : []);
   }
-  else { drawCrowdPulse(isLive); for (const c of chicks) c.display(); }
-  if (!isLive) drawHeat();
-}
-
-function drawBrooder() {
-  const F = CONFIG.floor, H = CONFIG.wallH, half = F / 2;
-  push(); noStroke();
-  fill(146, 102, 58);
-  for (const [lx, lz] of [[-half+6,-half+6],[half-6,-half+6],[-half+6,half-6],[half-6,half-6]]) {
-    push(); translate(lx, 13, lz); box(4.5, 24, 4.5); pop();
-  }
-  pop();
-  push(); noStroke();
-  fill(120, 85, 50); box(F, 2, F);
-  fill(214, 192, 148); translate(0, -1.1, 0); box(F - 2, 0.6, F - 2);
-  pop();
-  push(); stroke(150, 130, 95); strokeWeight(0.6); noFill();
-  for (let i = 0; i <= 4; i++) {
-    const p = -half + (F / 4) * i;
-    line(p, -1.5, -half, p, -1.5, half);
-    line(-half, -1.5, p, half, -1.5, p);
-  }
-  pop();
-  stroke(146, 102, 58); strokeWeight(3.4); noFill();
-  for (const s of [-1, 1]) {
-    line(s*half, -2, -half, s*half, -H-2, -half);
-    line(s*half, -2,  half, s*half, -H-2,  half);
-    line(-half, -H-1, s*half, half, -H-1, s*half);
-    line(s*half, -H-1, -half, s*half, -H-1, half);
-  }
-  noStroke();
-  for (let side = 0; side < 4; side++) {
-    push();
-    if (side === 1) rotateY(HALF_PI); else if (side === 2) rotateY(PI); else if (side === 3) rotateY(-HALF_PI);
-    translate(0, 0, -half + 1.2);
-    fill(172, 155, 109, 40);
-    beginShape(TRIANGLE_STRIP);
-    for (let i = 0; i <= 10; i++) {
-      const x = -half + 3 + (F - 6) * i / 10;
-      vertex(x, -H, 0);
-      vertex(x, -22 + Math.sin(x * 0.11 + sim.t * 0.02) * 1.2, 0);
-    }
-    endShape(); pop();
-  }
-  // ArUco corner fiducials (IDs 0, 1, 2, 3)
-  const arucoDetected = (window.PILOT_SAMPLE && window.PILOT_SAMPLE.vision && Array.isArray(window.PILOT_SAMPLE.vision.aruco_markers))
-    ? window.PILOT_SAMPLE.vision.aruco_markers : [];
-  for (const [id, ax, az] of [
-    [0, -half + 5, -half + 5],
-    [1,  half - 5, -half + 5],
-    [2, -half + 5,  half - 5],
-    [3,  half - 5,  half - 5],
-  ]) {
-    const on = arucoDetected.includes(id);
-    push();
-    translate(ax, -1.65, az);
-    strokeWeight(on ? 1.4 : 0.7);
-    stroke(on ? 96 : 118, on ? 175 : 112, on ? 110 : 96);
-    fill(on ? 236 : 220, on ? 245 : 212, on ? 224 : 190);
-    box(5.6, 0.35, 5.6);
-    noStroke();
-    fill(on ? 38 : 65, on ? 62 : 62, on ? 34 : 54);
-    translate(0, -0.15, 0);
-    box(3.0, 0.3, 3.0);
-    pop();
-  }
-  if (arucoDetected.length === 4 || (window.PILOT_SAMPLE && window.PILOT_SAMPLE.vision && window.PILOT_SAMPLE.vision.aruco_mapped)) {
-    push();
-    stroke(96, 175, 110); strokeWeight(1.8); noFill();
-    const b = half - 5;
-    line(-b, -1.5, -b,  b, -1.5, -b);
-    line( b, -1.5, -b,  b, -1.5,  b);
-    line( b, -1.5,  b, -b, -1.5,  b);
-    line(-b, -1.5,  b, -b, -1.5, -b);
-    pop();
-  }
-  // heat lamp
-  push(); translate(0, -52, 0); noStroke(); fill(45, 45, 52);
-  cone(9, 7, 18, 4, false);
-  translate(0, 6.2, 0);
-  if (sim.forced === 'LIVE') fill(110, 105, 87);
-  else fill(255, lerp(60, 200, sim.lampPWM), lerp(40, 90, sim.lampPWM));
-  sphere(3.6, 12, 8); pop();
-  stroke(70); strokeWeight(0.7); noFill(); line(0, -52, 0, 0, -CONFIG.camH + 1, 0);
-}
-
-function drawCrowdPulse(isLive) {
-  if (!sim.crowdActive) return;
-  const pts = isLive ? liveDots.map(d => [d.x, d.z]) : chicks.map(c => [c.pos.x, c.pos.z]);
-  let x = 0, z = 0;
-  for (const p of pts) { x += p[0]; z += p[1]; }
-  if (!pts.length) return;
-  x /= pts.length; z /= pts.length;
-  const pulse = 10 + 8 * Math.abs(Math.sin(sim.t * 0.12));
-  push(); translate(x, -1.4, z);
-  noFill(); stroke(220, 0, 20, 220); strokeWeight(1.6);
-  circle(0, 0, pulse * 2);
-  stroke(220, 0, 20, 90); strokeWeight(0.8);
-  circle(0, 0, pulse * 2.9);
-  pop();
-}
-
-function drawHeat() {
-  push(); noStroke(); translate(0, -1.55, 0); rotateX(HALF_PI);
-  const r = lerp(24, 44, sim.lampPWM);
-  fill(249, 115, 22, 14 + sim.lampPWM * 18);
-  circle(0, 0, r * 2);
-  fill(251, 146, 60, 18 + sim.lampPWM * 22);
-  circle(0, 0, r * 1.3);
-  fill(253, 186, 116, 22 + sim.lampPWM * 26);
-  circle(0, 0, r * 0.7);
-  pop();
+  window.brooderScene?.update({ isLive, pilot, points, chicks, sim });
 }
 
 // ================= UI BINDING =================
@@ -1186,7 +1019,7 @@ $('btndark').addEventListener('click', () => {
   if (metaTheme) metaTheme.setAttribute('content', DARKMODE ? '#0b0f17' : '#f3f5f8');
   LOGS.log('info', (DARKMODE ? 'dark' : 'light') + ' mode');
 });
-$('btnsnap').addEventListener('click', () => saveCanvas('thermohuddle_mobile', 'png'));
+$('btnsnap').addEventListener('click', () => window.brooderScene?.snapshot());
 
 // ---- view toggle: dots (3D) ↔ live camera feed ----
 // Modes (auto-detected from BROKER.feed_url):
@@ -1844,30 +1677,10 @@ $('connchip').addEventListener('click', () => {
     .catch(() => { const host = location.hostname || 'localhost'; window.connectMQTT('ws://' + host + ':9001'); });
 });
 
-// touch orbit
-const vp = document.getElementById('viewport');
-vp.addEventListener('touchstart', e => { dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; }, { passive: true });
-vp.addEventListener('touchmove', e => {
-  if (!dragging) return;
-  camAng -= (e.touches[0].clientX - lastX) * 0.008;
-  camElev = constrain(camElev + (e.touches[0].clientY - lastY) * 0.005, 0.08, 1.35);
-  lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-}, { passive: true });
-vp.addEventListener('touchend', () => dragging = false);
-vp.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
-window.addEventListener('mousemove', e => {
-  if (!dragging) return;
-  camAng -= (e.clientX - lastX) * 0.007;
-  camElev = constrain(camElev + (e.clientY - lastY) * 0.004, 0.08, 1.35);
-  lastX = e.clientX; lastY = e.clientY;
-});
-window.addEventListener('mouseup', () => dragging = false);
-vp.addEventListener('wheel', e => { camDist = constrain(camDist + e.delta * 0.15, 90, 420); e.preventDefault(); }, { passive: false });
-
 // SW registration
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=23')
+    navigator.serviceWorker.register('sw.js?v=24')
       .then((reg) => reg.update())
       .catch(err => console.warn('[sw]', err));
     // Updated workers claim instantly (skipWaiting); apply their new shell once.
